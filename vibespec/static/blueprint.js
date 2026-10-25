@@ -1,0 +1,105 @@
+/* Blueprint renderer: four sections, each with evidence funnel, picks, uncertainty and rejected alternatives. */
+(() => {
+  const { el, svg, pct } = VS;
+  const ICONS = {
+    artist: () => svg("svg", { viewBox: "0 0 32 32", fill: "none", stroke: "currentColor", "stroke-width": "2.2", "stroke-linecap": "round", "aria-hidden": "true" }, ...[4, 9, 14, 19, 24, 29].map((x, i) => svg("path", { d: `M${x},${16 - [3, 8, 5, 11, 6, 3][i]} V${16 + [3, 8, 5, 11, 6, 3][i]}` }))),
+    book: () => svg("svg", { viewBox: "0 0 32 32", fill: "none", stroke: "currentColor", "stroke-width": "2.2", "stroke-linejoin": "round", "aria-hidden": "true" }, svg("path", { d: "M16 8c-3-2.5-8-3-12-2v18c4-1 9-.5 12 2 3-2.5 8-3 12-2V6c-4-1-9-.5-12 2zM16 8v18" })),
+    brand: () => svg("svg", { viewBox: "0 0 32 32", fill: "none", stroke: "currentColor", "stroke-width": "2.2", "stroke-linejoin": "round", "aria-hidden": "true" }, svg("path", { d: "M13 3h6v4l3 4v17a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V11l3-4zM10 16h12" })),
+    place: () => svg("svg", { viewBox: "0 0 32 32", fill: "none", stroke: "currentColor", "stroke-width": "2.2", "stroke-linejoin": "round", "aria-hidden": "true" }, svg("path", { d: "M16 29s9-8 9-15a9 9 0 0 0-18 0c0 7 9 15 9 15z" }), svg("circle", { cx: 16, cy: 14, r: 3.2 })),
+  };
+  const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const usable = (dom, n) => n - dom.anchors_ignored.length - Object.keys(dom.anchors_rejected).length;
+
+  function facts(domain, p) {
+    const pr = p.props, bits = [];
+    if (domain === "place") {
+      if (pr.address) bits.push(pr.address);
+      if (pr.price_level) bits.push("$".repeat(pr.price_level));
+      if (pr.business_rating) bits.push(`rated ${Number(pr.business_rating).toFixed(1)}`);
+    }
+    if (domain === "book") { if (pr.publication_year) bits.push(`published ${pr.publication_year}`); if (pr.page_count) bits.push(`${pr.page_count} pages`); }
+    if (domain === "brand" && pr.price_range_usd_min != null) bits.push(`indicative $${pr.price_range_usd_min} to $${pr.price_range_usd_max ?? "?"} (Qloo metadata, not a quote)`);
+    if (domain === "brand" && pr.industry) bits.push(pr.industry);
+    return bits.join(", ");
+  }
+  function constraintChips(p) {
+    const m = /Constraints met(?: \(where data existed\))?: (.*?)\.(?: |$)/.exec(p.why || "");
+    return [...(m ? m[1].split("; ") : []).map((t) => el("span", { class: "st ok" }, t)), ...p.unverified.map((t) => el("span", { class: "st unk" }, t))];
+  }
+  function attribution(p, names, single) {
+    const total = names.reduce((s, n) => s + (p.attribution[n] || 0), 0);
+    if (!total) return el("p", { class: "hint" }, "Qloo returned no per-anchor attribution for this pick.");
+    const bar = el("div", { class: "attr", role: "img", "aria-label": `Anchor contribution: ${names.filter((n) => p.attribution[n]).map((n) => `${n} ${pct(p.attribution[n])}`).join(", ")}` });
+    names.forEach((n, i) => { if (p.attribution[n]) { const seg = el("i", {}); seg.style.width = `${(p.attribution[n] / total) * 100}%`; seg.style.background = VS.ANCHOR_VAR[i]; bar.append(seg); } });
+    const shares = el("div", { class: "shares" }, names.filter((n) => p.attribution[n]).map((n) => { const i = names.indexOf(n), sw = el("span", { class: "sw" }); sw.style.background = VS.ANCHOR_VAR[i]; return el("span", {}, sw, `${n} ${pct(p.attribution[n])}`); }));
+    return el("div", {}, bar, shares, single ? el("p", { class: "hint" }, "Only one anchor was usable here, so 100% is trivial.") : null);
+  }
+  function card(domain, p, names, single) {
+    return el("article", { class: "pick-card", id: VS.viz.cardId(domain, p), tabindex: "-1", "data-primary": p.primary_anchor || "" },
+      el("h4", {}, p.name, el("small", {}, `#${p.rank_in_query} of ${p.of}`)),
+      facts(domain, p) ? el("p", { class: "facts" }, facts(domain, p)) : null,
+      attribution(p, names, single), el("div", { class: "status" }, constraintChips(p)),
+      el("details", {}, el("summary", {}, "Why this pick"), el("p", {}, p.why), p.props.short_description || p.props.description ? el("p", { class: "hint" }, p.props.short_description || p.props.description) : null,
+        p.tags.length ? el("div", { class: "tagline" }, p.tags.map((t) => el("span", {}, t))) : null));
+  }
+  function funnel(dom) {
+    const pool = Math.max(dom.pool_size, 1), passed = dom.pool_size - dom.rejected.length;
+    const row = (cls, text, n) => { const m = el("div", { class: "meter" }, el("i", {})); m.firstChild.style.width = `${(n / pool) * 100}%`; return el("div", { class: `fun-row ${cls}` }, m, el("span", {}, text)); };
+    return el("div", { class: "funnel", role: "group", "aria-label": "Evidence funnel" }, row("top", `${dom.pool_size} retrieved from Qloo`, dom.pool_size), row("mid", `${passed} met your constraints`, passed), row("low", `${dom.selected.length} selected`, dom.selected.length));
+  }
+  function considered(dom) {
+    if (!dom.rejected.length && !dom.outranked.length) return null;
+    return el("details", { class: "considered" }, el("summary", {}, `Considered but not chosen (${dom.rejected.length} rejected, ${dom.outranked.length} shown as outranked)`),
+      el("div", { class: "body" },
+        el("div", {}, el("h4", {}, "Rejected by your constraints"), dom.rejected.length ? el("ul", { class: "rowlist" }, dom.rejected.slice(0, 12).map((r) => el("li", {}, el("b", {}, r.name), el("div", { class: "reasons" }, r.reasons.map((x) => el("span", {}, x)))))) : el("p", { class: "hint" }, "Nothing was rejected."),
+          dom.rejected.length > 12 ? el("p", { class: "hint" }, `${dom.rejected.length - 12} more in the JSON export.`) : null),
+        el("div", {}, el("h4", {}, "Acceptable but not selected"), dom.outranked.length ? el("ul", { class: "rowlist" }, dom.outranked.map((o) => el("li", {}, el("b", {}, o.name), ` ranked #${o.rank_in_query}`))) : el("p", { class: "hint" }, "None to show."))));
+  }
+  function section(bp, d) {
+    const dom = bp.domains[d.key], names = bp.anchors.map((a) => a.name), single = usable(dom, names.length) <= 1;
+    const notices = [...dom.anchors_ignored.map((a) => `${a} was accepted by Qloo but contributed nothing here. These picks reflect ${names.filter((n) => n !== a && !dom.anchors_ignored.includes(n)).join(" and ") || "no anchor"} only.`),
+      ...Object.entries(dom.anchors_rejected).map(([a, why]) => `${a}: ${why}.`)];
+    return el("section", { class: "bp-sec", id: d.id, "aria-labelledby": `h-${d.id}` }, el("div", { class: "wrap" },
+      el("div", { class: `sec-head ${d.cls}` }, el("div", {}, el("h2", { id: `h-${d.id}` }, ICONS[d.key](), d.title), el("p", {}, d.blurb)), funnel(dom)),
+      notices.map((n) => el("p", { class: "notice" }, el("b", {}, "Signal gap. "), n)),
+      dom.selected.length ? el("div", { class: "picks" }, dom.selected.map((p) => card(d.key, p, names, single)))
+        : el("div", { class: "empty" }, dom.anchors_rejected && Object.keys(dom.anchors_rejected).length === names.length ? "Qloo found no usable signal for any of your anchors in this section, so there are no recommendations." : dom.rejected.length ? "Every candidate failed your constraints. Relax them and rebuild." : "No recommendations came back for this section."),
+      considered(dom)));
+  }
+  function download(name, type, text) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const a = el("a", { href: url, download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function exportRow(bp) {
+    const { markdown, ...plain } = bp;
+    return el("div", { class: "export", id: "export" }, el("button", { class: "btn", type: "button", onclick: () => download("vibespec-blueprint.md", "text/markdown", markdown) }, "Download Markdown"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => download("vibespec-blueprint.json", "application/json", JSON.stringify(plain, null, 2)) }, "Download JSON"));
+  }
+
+  VS.blueprint = {
+    render(bp) {
+      const names = bp.anchors.map((a) => a.name), doms = VS.DOMAINS.map((d) => bp.domains[d.key]);
+      const sum = (f) => doms.reduce((s, d) => s + f(d), 0), prov = bp.provenance || {};
+      const stats = [[sum((d) => d.selected.length), "picks selected"], [sum((d) => d.pool_size), "candidates examined"], [sum((d) => d.rejected.length), "rejected by constraints"],
+        [(prov.live_calls || 0) + (prov.cache_hits || 0), `Qloo requests (${prov.live_calls || 0} live)`]];
+      const summary = el("section", { class: "summary reveal", "aria-labelledby": "h-sum" }, el("div", { class: "wrap" },
+        el("h1", { id: "h-sum", tabindex: "-1" }, bp.brief.concept || "Cultural experience blueprint"),
+        el("p", { class: "lede" }, `${bp.brief.city}. Built from ${names.length} anchors by a rule-based agent, using Qloo responses.`),
+        el("div", { class: "anchor-row" }, names.map((n, i) => { const t = el("span", { class: "tag" }, n); t.style.background = VS.ANCHOR_VAR[i]; return t; })),
+        el("div", { class: "stats" }, stats.map(([n, l]) => el("div", { class: "stat" }, el("b", {}, n), el("span", {}, l)))), exportRow(bp)));
+      const nav = el("nav", { class: "bpnav", "aria-label": "Blueprint sections" }, el("div", { class: "wrap" }, el("a", { href: "#influence" }, "Anchor influence"),
+        VS.DOMAINS.map((d) => el("a", { href: `#${d.id}` }, d.title)), el("a", { href: "#notes" }, "Evidence notes"), el("a", { href: "#trace" }, "Agent trace")));
+      const budgetRows = bp.budget.indicative_qloo_brand_price_ranges;
+      const notes = el("section", { class: "info", id: "notes", "aria-labelledby": "h-notes" }, el("div", { class: "wrap" }, el("h2", { id: "h-notes" }, "What is verified, and what is not"),
+        el("p", {}, bp.budget.disclaimer),
+        budgetRows.length ? el("div", { class: "table-wrap" }, el("table", { class: "maptable" }, el("caption", { class: "sr-only" }, "Amenity brand price indications"), el("thead", {}, el("tr", {}, ["Brand", "Qloo indicative low", "Qloo indicative high", "Against your assumption"].map((h) => el("th", { scope: "col" }, h)))),
+          el("tbody", {}, budgetRows.map((r) => el("tr", {}, el("th", { scope: "row" }, r.brand), el("td", {}, r.qloo_indicative_usd_min != null ? `$${r.qloo_indicative_usd_min}` : "not provided"), el("td", {}, r.qloo_indicative_usd_max != null ? `$${r.qloo_indicative_usd_max}` : "not provided"), el("td", {}, r.fit_vs_user_assumption)))))) : null,
+        el("ul", {}, bp.missing_data.map((m) => el("li", {}, m)))));
+      const trace = el("section", { class: "info trace", id: "trace", "aria-labelledby": "h-trace" }, el("div", { class: "wrap" }, el("h2", { id: "h-trace" }, "Agent decision trace"),
+        el("p", {}, "Each step was chosen by explicit rules from the evidence so far. There is no language model in the loop."),
+        el("ol", {}, bp.trace.map((t) => el("li", {}, el("b", {}, `${t.step}. ${t.tool}${t.arg ? ` (${t.arg})` : ""}`), el("span", {}, t.outcome)))),
+        el("p", { class: "provenance" }, `Data: ${prov.live_calls || 0} live Qloo calls, ${prov.cache_hits || 0} served from this server's private cache (real earlier Qloo responses).`), exportRow(bp)));
+      return [summary, nav, VS.viz.section(bp), ...VS.DOMAINS.map((d) => section(bp, d)), notes, trace];
+    },
+  };
+})();

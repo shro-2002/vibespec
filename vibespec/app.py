@@ -18,7 +18,9 @@ from .blueprint import to_markdown
 from .jobs import Busy, JobManager
 from .qloo import QlooService
 
-STATIC = Path(__file__).parent / "static" / "index.html"
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC = STATIC_DIR / "index.html"
+ASSET_TYPES = {".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}
 MAX_BODY = 8_000
 JOB_ID = re.compile(r"^/api/jobs/([A-Za-z0-9_-]{8,40})$")
 
@@ -104,11 +106,11 @@ JOBS = JobManager(runner, CFG.max_running, CFG.max_queued, job_timeout_s=CFG.job
 class Handler(BaseHTTPRequestHandler):
     server_version = "VibeSpec"
 
-    def _send(self, code: int, body: bytes, ctype: str = "application/json") -> None:
+    def _send(self, code: int, body: bytes, ctype: str = "application/json", cache: str = "no-store") -> None:
         self.send_response(code)
         for k, v in {"Content-Type": ctype, "Content-Length": str(len(body)), "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
-                     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'",
-                     "Cache-Control": "no-store"}.items():
+                     "Content-Security-Policy": "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'",
+                     "Cache-Control": cache}.items():
             self.send_header(k, v)
         self.end_headers()
         if self.command != "HEAD":  # HEAD gets headers only (uptime monitors and link checkers use it)
@@ -128,6 +130,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True, "qloo_key_configured": bool(CFG.key)})
         if path == "/":
             return self._send(200, STATIC.read_bytes(), "text/html; charset=utf-8")
+        if path.startswith("/static/"):
+            asset = STATIC_DIR / path[len("/static/"):]
+            if asset.parent == STATIC_DIR and asset.suffix in ASSET_TYPES and asset.is_file():  # flat dir only: no traversal
+                return self._send(200, asset.read_bytes(), ASSET_TYPES[asset.suffix], "public, max-age=60")
+            return self._json(404, {"error": "not found"})
         m = JOB_ID.match(path)
         if m:
             if not allow(self._ip(), "poll", CFG.poll_per_min):

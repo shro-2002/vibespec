@@ -128,3 +128,21 @@ def test_head_requests_are_supported(server):
     r = urllib.request.Request(server + "/healthz", method="HEAD")
     with urllib.request.urlopen(r) as x:
         assert x.status == 200 and x.read() == b"" and x.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_static_assets_served_with_strict_csp_and_no_traversal(server):
+    for name, ctype in (("app.css", "text/css"), ("main.js", "text/javascript")):
+        with urllib.request.urlopen(f"{server}/static/{name}") as x:
+            assert x.status == 200 and ctype in x.headers["Content-Type"]
+    with urllib.request.urlopen(server + "/") as x:
+        csp = x.headers["Content-Security-Policy"]
+        assert "unsafe-inline" not in csp and "script-src 'self'" in csp and b"/static/app.css" in x.read()
+    for bad in ("/static/../app.py", "/static/nope.js", "/static/index.html", "/static/%2e%2e/app.py"):
+        assert req(server + bad)[0] == 404
+
+
+def test_every_script_referenced_by_the_page_exists(server):
+    import re
+    html = req(server + "/")[1]
+    refs = re.findall(r'(?:src|href)="(/static/[^"]+)"', html)
+    assert len(refs) >= 7 and all(req(server + r)[0] == 200 for r in refs)
