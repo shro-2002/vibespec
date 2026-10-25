@@ -52,7 +52,8 @@ class Suitability:
     fit: list[str] = field(default_factory=list)  # evidence FOR the brief
     against: list[str] = field(default_factory=list)  # evidence AGAINST (reason for conflict/reject)
     verified: list[str] = field(default_factory=list)  # operational facts present in Qloo metadata
-    unknowns: list[str] = field(default_factory=list)  # what must be checked before acting
+    unknowns: list[str] = field(default_factory=list)  # missing evidence about FIT with the brief
+    gaps: list[str] = field(default_factory=list)  # operational facts nobody has verified (hours, licensing, products, prices)
     next_action: str = ""
     label: str = ""  # short user-facing status
     discovery_lead: bool = False  # place with no evidence that it currently operates: shown last, clearly labelled
@@ -82,15 +83,15 @@ def music(c: Candidate, p: Profile) -> Suitability:
     s = Suitability("unverified", "Playlist candidate for lobby and rooms (artist level, not specific tracks)")
     descr = _text(c, "adjectives_for_music", "primary_genres", "performance_style") + " " + " ".join(c.tags)
     calm, loud = words_in(descr, CALM_MUSIC), words_in(descr, ENERGETIC_MUSIC)
-    s.unknowns += ["Track-level tempo and volume are not in Qloo data: audition specific tracks before use",
-                   "Public-performance licensing not checked: play through a licensed background-music service"]
+    s.unknowns.append("Song-level tempo and volume are not in Qloo data: audition specific tracks before use")
+    s.gaps.append("Public-performance licensing not checked: play only through a licensed background-music service")
     s.next_action = "Audition 3 to 5 tracks at lobby volume; source them through a licensed background-music provider."
     if p.calm and len(loud) >= 2 and len(loud) > len(calm):
         s.verdict, s.label = "conflict", "Too energetic for a calm brief"
         s.against.append(f"Artist descriptors suggest high energy: {', '.join(loud)}")
     elif p.calm and calm and len(calm) >= len(loud):
         s.verdict, s.label = "aligned", "Calm-leaning (artist level)"
-        s.fit.append(f"Artist descriptors include {', '.join(calm)}" + (f"; also {', '.join(loud)}" if loud else ""))
+        s.fit.append(f"Artist descriptors include {', '.join(calm)}" + (f"; also {', '.join(loud)}" if loud else "") + " (describes the artist, not specific songs)")
     elif not p.calm:
         s.label = "No atmosphere requirement stated"
     else:
@@ -103,7 +104,7 @@ def book(c: Candidate, p: Profile) -> Suitability:
     s = Suitability("unverified", "Guest library shelf")
     text = f"{c.name} {_text(c, 'description')}"
     eco, dark = words_in(text, ECO_TOPIC), words_in(text, DARK_TOPIC)
-    s.unknowns.append("Edition, format and price not checked")
+    s.gaps.append("Edition, format, availability and price not checked")
     s.next_action = "Order a reading copy and check the edition before shelving."
     if p.calm and len(dark) >= 2 and len(dark) > len(eco):
         s.verdict, s.label = "conflict", "Themes clash with a calm, mindful stay"
@@ -128,7 +129,7 @@ def brand(c: Candidate, p: Profile) -> Suitability:
     s = Suitability("unverified", "Brand-level partnership idea (no specific product selected)")
     kind = _text(c, "brand_type", "category_description", "industry")  # the brand's own category, not loose tags
     supplier_conflict, amenity, market = words_in(kind, NOT_A_SUPPLIER), words_in(kind, AMENITY_CATEGORY), words_in(kind, MARKETPLACE)
-    s.unknowns.append("No specific product, unit price, minimum order or supplier terms verified")
+    s.gaps.append("No specific product, unit price, minimum order, availability or supplier terms verified")
     s.next_action = "Contact the brand's wholesale or hospitality team for an amenity product list and terms."
     if supplier_conflict and not amenity:
         s.verdict, s.label = "conflict", "Not a product supplier"
@@ -147,7 +148,7 @@ def brand(c: Candidate, p: Profile) -> Suitability:
     elif p.eco:
         s.unknowns.append("No sustainability initiatives listed in Qloo metadata")
     s.verdict = "aligned" if amenity and not market and (not p.eco or initiatives) else "unverified"
-    s.label = "Amenity fit" if s.verdict == "aligned" else "Partnership idea, fit unverified"
+    s.label = "Amenity-category brand (no product verified)" if s.verdict == "aligned" else "Brand partnership idea (no product verified)"
     return s
 
 
@@ -180,13 +181,14 @@ def place(c: Candidate, p: Profile) -> Suitability:
         return s
     hours = c.props.get("hours")
     if not hours:
-        s.unknowns.append("No opening hours in Qloo data: it may have closed. Treat as a discovery lead until confirmed")
-        s.label, s.discovery_lead = "Discovery lead: confirm it is operating", True
+        s.gaps.append("No opening hours in Qloo data: it may have closed. Do not describe it to guests as operating until confirmed")
+        s.label, s.discovery_lead = "Discovery lead: opening hours unknown", True
     elif hours.get("days_open", 0) == 0:
-        s.unknowns.append("Hours data lists it closed every day: confirm operation")
-        s.label, s.discovery_lead = "Discovery lead: confirm it is operating", True
+        s.gaps.append("Qloo hours list it closed every day: confirm it operates before recommending")
+        s.label, s.discovery_lead = "Discovery lead: opening hours unknown", True
     else:
         s.verified.append(f"Qloo lists opening hours on {hours['days_open']} days (may be out of date)")
+        s.gaps.append("Current opening hours not confirmed")
     if c.props.get("business_rating"):
         s.verified.append(f"Qloo business rating {float(c.props['business_rating']):.1f}")
     ok_status = bool(hours) and hours.get("days_open", 0) > 0
@@ -196,18 +198,19 @@ def place(c: Candidate, p: Profile) -> Suitability:
             s.verdict, s.label = "conflict", "Too far to walk"
             s.against.append(f"{km:.1f} km straight-line from the hotel (limit {p.max_walk_km:g} km)")
             return s
-        s.fit.append(f"{km:.1f} km straight-line from the hotel, about {round(km / WALK_KMH * 60)} min on foot (estimate)")
-    elif p.walk:
-        s.unknowns.append("Walking distance unknown: add the hotel's coordinates to check")
+        s.fit.append(f"{km:.1f} km straight-line from the hotel; at least {round(km / WALK_KMH * 60)} min on foot (straight-line estimate, real routes are longer)")
+    else:
+        s.unknowns.append("Distance from the hotel not checked: no precise hotel location was given")
     if "tourist attraction" in tags.casefold():
         s.unknowns.append("Qloo also tags it as a tourist attraction: check it suits a local, intimate recommendation")
     if c.props.get("short_description"):
-        s.fit.append("Qloo description: " + str(c.props["short_description"])[:140])
-    s.verdict = "aligned" if ok_status and (not p.walk or p.hotel_latlon) else "unverified"
+        d = str(c.props["short_description"])
+        s.fit.append("Qloo description: " + (d[:140].rsplit(" ", 1)[0] + "…" if len(d) > 140 else d))
+    s.verdict = "aligned" if ok_status and p.hotel_latlon else "unverified"
     if s.verdict == "aligned":
-        s.label = "Fits brief; hours listed"
+        s.label = "Fits the brief within reach (hours listed, not confirmed)"
     elif not s.label:
-        s.label = "Fit plausible; distance or status unverified"
+        s.label = "City-level lead: distance from the hotel not checked"
     s.next_action = "Call or visit to confirm current opening hours and that the tone suits the hotel, then add it to the concierge list."
     return s
 
@@ -234,4 +237,4 @@ def exclusion(c: Candidate, terms: tuple[str, ...]) -> tuple[list[str], list[str
 
 
 def as_dict(s: Suitability) -> dict[str, Any]:
-    return {k: getattr(s, k) for k in ("verdict", "label", "use", "fit", "against", "verified", "unknowns", "next_action")}
+    return {k: getattr(s, k) for k in ("verdict", "label", "use", "fit", "against", "verified", "unknowns", "gaps", "next_action")}

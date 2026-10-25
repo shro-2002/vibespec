@@ -294,3 +294,11 @@ body[data-view=result] .run-bar{padding:8px 0;background:transparent;border-bott
 .fit-row.good ul{color:var(--ink)}.fit-row.unk ul{color:var(--ochre)}.fit-row.none ul{color:var(--mute);font-style:italic}
 .evlabel{font-size:.78rem;color:var(--mute);margin-top:4px}
 .considered .body{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.fit-row.gap ul{color:var(--bad)}
+.fit-row.aff{border-top:1px dashed var(--line);padding-top:8px}
+.fit-row.aff .hint{margin:2px 0 6px}
+.pick-card .verdict{margin-top:-2px}
+.loc-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.loc-row input{flex:1 1 220px}
+.loc-status{font-size:.85rem;color:var(--ink2);min-height:1.3em}
+.loc-status.ok{color:var(--moss)}.loc-status.bad{color:var(--bad)}

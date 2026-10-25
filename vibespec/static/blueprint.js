@@ -34,29 +34,26 @@
     const shares = el("div", { class: "shares" }, names.filter((n) => p.attribution[n]).map((n) => { const i = names.indexOf(n), sw = el("span", { class: "sw" }); sw.style.background = VS.ANCHOR_VAR[i]; return el("span", {}, sw, `${n} ${pct(p.attribution[n])}`); }));
     return el("div", {}, bar, shares, single ? el("p", { class: "hint" }, "Only one anchor was usable here, so 100% is trivial.") : null);
   }
-  function fitBlock(p) {
-    const st = p.suitability;
-    if (!st) return null;
-    const list = (title, items, cls) => (items && items.length ? el("div", { class: `fit-row ${cls}` }, el("b", {}, title), el("ul", {}, items.map((x) => el("li", {}, x)))) : null);
-    const lead = /Discovery lead/.test(st.label);
-    return el("div", { class: "fit" },
-      el("p", { class: `verdict ${lead ? "lead" : st.verdict}` }, st.label),
-      el("p", { class: "use" }, el("b", {}, "Use: "), st.use),
-      list("Fits your brief", st.fit.length ? st.fit : ["No positive evidence for your stated goals yet"], st.fit.length ? "good" : "none"),
-      list("Verified in Qloo data", st.verified, "ver"),
-      list("Check before using", st.unknowns, "unk"),
-      el("p", { class: "next" }, el("b", {}, "Next step: "), st.next_action),
-      p.alternative ? el("p", { class: "alt" }, el("b", {}, "If this falls through: "), `${p.alternative.name} (${p.alternative.label.toLowerCase()})`) : null);
+  function block(title, items, cls, empty) {
+    const list = items && items.length ? items : empty ? [empty] : [];
+    return list.length ? el("div", { class: `fit-row ${cls}${items && items.length ? "" : " none"}` }, el("b", {}, title), el("ul", {}, list.map((x) => el("li", {}, x)))) : null;
   }
   function card(domain, p, names, single) {
+    const st = p.suitability || { label: "", use: "", fit: [], verified: [], unknowns: p.unverified, gaps: [], verdict: "unverified", next_action: "" };
+    const lead = /lead/i.test(st.label);
     return el("article", { class: "pick-card", id: VS.viz.cardId(domain, p), tabindex: "-1", "data-primary": p.primary_anchor || "" },
-      el("h4", {}, p.name, el("small", {}, `affinity #${p.rank_in_query} of ${p.of}`)),
+      el("h4", {}, p.name),
       facts(domain, p) ? el("p", { class: "facts" }, facts(domain, p)) : null,
-      fitBlock(p),
-      el("p", { class: "evlabel" }, "Cultural affinity reported by Qloo (not a measure of fit)"),
-      attribution(p, names, single), el("div", { class: "status" }, constraintChips(p)),
-      el("details", {}, el("summary", {}, "Why this pick"), el("p", {}, p.why), p.props.short_description || p.props.description ? el("p", { class: "hint" }, p.props.short_description || p.props.description) : null,
-        p.tags.length ? el("div", { class: "tagline" }, p.tags.map((t) => el("span", {}, t))) : null));
+      el("p", { class: `verdict ${lead ? "lead" : st.verdict}` }, st.label),
+      st.use ? el("p", { class: "use" }, el("b", {}, "Use: "), st.use) : null,
+      el("div", { class: "fit-row aff" }, el("b", {}, "Why Qloo surfaced it (cultural affinity, not fit)"), p.surfaced ? el("p", { class: "hint" }, p.surfaced) : null, attribution(p, names, single)),
+      block("Why it fits your brief", st.fit, "good", "No positive fit evidence yet"),
+      block("In Qloo data, not confirmed", st.verified, "ver"),
+      block("Missing fit evidence", st.unknowns, "unk"),
+      block("Check before using", st.gaps, "gap"),
+      el("div", { class: "status" }, constraintChips({ ...p, unverified: [] })),
+      st.next_action ? el("p", { class: "next" }, el("b", {}, "Next step: "), st.next_action) : null,
+      p.alternative ? el("p", { class: "alt" }, el("b", {}, "If this falls through: "), `${p.alternative.name} (${p.alternative.label.toLowerCase()})`) : null);
   }
   function funnel(dom) {
     const pool = Math.max(dom.pool_size, 1), passed = dom.pool_size - dom.rejected.length, fits = passed - (dom.off_brief || []).length;
@@ -102,7 +99,8 @@
         [(prov.live_calls || 0) + (prov.cache_hits || 0), `Qloo requests (${prov.live_calls || 0} live)`]];
       const summary = el("section", { class: "summary reveal", "aria-labelledby": "h-sum" }, el("div", { class: "wrap" },
         el("h1", { id: "h-sum", tabindex: "-1" }, bp.brief.concept || "Cultural experience blueprint"),
-        el("p", { class: "lede" }, `${bp.brief.city}. Built from ${names.length} anchors by a rule-based agent, using Qloo responses.`),
+        el("p", { class: "lede" }, `${bp.brief.city}. Built from ${names.length} anchors by a rule-based agent, using Qloo responses. ` +
+          (bp.brief.constraints.hotel_lat != null ? `Distances are straight-line from ${bp.brief.constraints.hotel_lat.toFixed(4)}, ${bp.brief.constraints.hotel_lon.toFixed(4)}.` : "No exact hotel location was given, so places are city-level leads with no walking times.")),
         el("div", { class: "anchor-row" }, names.map((n, i) => { const t = el("span", { class: "tag" }, n); t.style.background = VS.ANCHOR_VAR[i]; return t; })),
         el("div", { class: "stats" }, stats.map(([n, l]) => el("div", { class: "stat" }, el("b", {}, n), el("span", {}, l)))), exportRow(bp)));
       const nav = el("nav", { class: "bpnav", "aria-label": "Blueprint sections" }, el("div", { class: "wrap" }, el("a", { href: "#influence" }, "Anchor influence"),

@@ -55,6 +55,8 @@ def _pick(c: Candidate, rank: int, n: int, names: dict[str, str], checks: list[s
            "unverified": unverified, "props": dict(c.props), "geo": dict(c.geo) if c.geo else None, "tags": list(c.tags[:6])}
     if fit is not None:  # Stage B: kept separate from the affinity evidence above
         out["suitability"] = {**as_dict(fit), "unknowns": list(dict.fromkeys(fit.unknowns + unverified))}
+        out["surfaced"] = (f"Qloo found affinity with audiences of {' and '.join(f'{k} ({v:.0%})' for k, v in sh.items())}; affinity rank {rank} of {n} in this query"
+                           if sh else f"Qloo returned it for your anchors (affinity rank {rank} of {n}); no per-anchor attribution")
         out["alternative"] = alternative
     return out
 
@@ -161,9 +163,12 @@ def to_markdown(bp: dict[str, Any]) -> str:
             L.append(f"- **{p['name']}**{loc}. {p['why']}" + (f" Unverified: {'; '.join(p['unverified'])}." if p["unverified"] else ""))
             st = p.get("suitability")
             if st:
-                L.append(f"  - Use: {st['use']}. Status: {st['label']}.")
-                L += [f"  - Fits your goals: {x}" for x in st["fit"]] + [f"  - Verified (Qloo metadata): {x}" for x in st["verified"]]
-                L += [f"  - Check before using: {x}" for x in st["unknowns"]] + [f"  - Next step: {st['next_action']}"]
+                L.append(f"  - Status: {st['label']}. Use: {st['use']}.")
+                L.append(f"  - Why Qloo surfaced it (cultural affinity, not fit): {p.get('surfaced', '')}")
+                L += [f"  - Why it fits your brief: {x}" for x in st["fit"]] or ["  - Why it fits your brief: no positive evidence yet"]
+                L += [f"  - In Qloo data (not confirmed): {x}" for x in st["verified"]]
+                L += [f"  - Missing fit evidence: {x}" for x in st["unknowns"]] + [f"  - Check before using: {x}" for x in st.get("gaps", [])]
+                L.append(f"  - Next step: {st['next_action']}")
                 if p.get("alternative"):
                     L.append(f"  - Alternative: {p['alternative']['name']} ({p['alternative']['label']})")
         for a, why in dom["anchors_rejected"].items():

@@ -24,8 +24,8 @@ def test_energetic_artist_is_off_brief_for_calm_lobby():
 def test_calm_artist_aligned_but_never_claims_track_fit_or_licensing():
     s = assess(cand("artist", adjectives_for_music=["Warm", "Melodic"], primary_genres=["Indie Folk"]), CALM_ECO_LOCAL)
     assert s.verdict == "aligned"
-    assert any("licensing not checked" in u for u in s.unknowns) and any("Track-level" in u for u in s.unknowns)
-    assert not any(w in " ".join(s.fit).lower() for w in ("licensed", "cleared", "track"))
+    assert any("licensing not checked" in g for g in s.gaps) and any("Song-level" in u for u in s.unknowns)
+    assert not any(w in " ".join(s.fit).lower() for w in ("licensed", "cleared")) and "not specific songs" in s.fit[0]
 
 
 def test_landmark_is_not_a_local_find():
@@ -38,7 +38,7 @@ def test_venue_without_hours_is_a_labelled_discovery_lead_ranked_last():
     open_one = cand("place", "Listed", primary_genre="urn:tag:genre:place:cafe", hours={"days_listed": 7, "days_open": 6})
     fits = {c.id: assess(c, CALM_ECO_LOCAL) for c in (no_hours, open_one)}
     lead = fits[no_hours.id]
-    assert lead.verdict == "unverified" and lead.discovery_lead and "may have closed" in lead.unknowns[0]
+    assert lead.verdict == "unverified" and lead.discovery_lead and "may have closed" in lead.gaps[0] and "unknown" in lead.label
     assert not lead.verified  # nothing operational is claimed
     assert [c.name for c in rank([no_hours, open_one], fits)] == ["Listed", "NoHours"]
 
@@ -51,7 +51,8 @@ def test_closed_and_hotels_are_never_destinations():
 def test_walkability_requires_precise_hotel_location():
     near = cand("place", primary_genre="urn:tag:genre:place:cafe", hours={"days_listed": 7, "days_open": 7}, geo={"lat": 40.7230, "lon": -73.9880})
     s = assess(near, CALM_ECO_LOCAL)
-    assert "Walking distance unknown" in " ".join(s.unknowns) and "on foot" not in " ".join(s.fit) and s.verdict == "unverified"
+    assert "no precise hotel location" in " ".join(s.unknowns) and "on foot" not in " ".join(s.fit) and s.verdict == "unverified"
+    assert s.label.startswith("City-level lead")
     located = profile("explore on foot", "", (40.7223, -73.9874))
     assert assess(near, located).verdict == "aligned" and "min on foot" in " ".join(assess(near, located).fit)
     far = cand("place", primary_genre="urn:tag:genre:place:cafe", hours={"days_listed": 7, "days_open": 7}, geo={"lat": 40.80, "lon": -73.95})
