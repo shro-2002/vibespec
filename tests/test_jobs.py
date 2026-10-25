@@ -122,3 +122,9 @@ def test_http_validation_and_unknown(server):
 def test_parse_brief_constraints():
     b = app.parse_brief({**GOOD, "constraints": {"max_place_price_level": "2", "exclude_terms": "a, b", "min_place_rating": ""}})
     assert b.constraints.max_place_price_level == 2 and b.constraints.exclude_terms == ("a", "b") and b.constraints.min_place_rating is None
+
+
+def test_head_requests_are_supported(server):
+    r = urllib.request.Request(server + "/healthz", method="HEAD")
+    with urllib.request.urlopen(r) as x:
+        assert x.status == 200 and x.read() == b"" and x.headers["X-Content-Type-Options"] == "nosniff"

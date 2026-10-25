@@ -111,7 +111,8 @@ class Handler(BaseHTTPRequestHandler):
                      "Cache-Control": "no-store"}.items():
             self.send_header(k, v)
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":  # HEAD gets headers only (uptime monitors and link checkers use it)
+            self.wfile.write(body)
 
     def _json(self, code: int, obj: dict) -> None:
         self._send(code, redact(json.dumps(obj, default=str)).encode())
@@ -134,6 +135,8 @@ class Handler(BaseHTTPRequestHandler):
             snap = JOBS.get(m.group(1))
             return self._json(200, snap) if snap else self._json(404, {"error": "Job not found (it may have expired or the server restarted)."})
         self._json(404, {"error": "not found"})
+
+    do_HEAD = do_GET  # noqa: N815
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/api/jobs":
