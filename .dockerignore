@@ -1,0 +1,7 @@
+.cache
+private
+fixtures
+.env*
+results.json
+RAW_RUN.md
+__pycache__

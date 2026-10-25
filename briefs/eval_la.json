@@ -1,0 +1,19 @@
+{
+ "concept": "Outdoor-minded wellness hotel near the coast for active guests",
+ "city": "Los Angeles",
+ "anchors": [
+  "Patagonia",
+  "Lululemon",
+  "Aesop"
+ ],
+ "goals": "energising but mellow music, books about nature and movement, clean amenities, local places to eat and explore outside",
+ "constraints": {
+  "max_place_price_level": 2,
+  "min_place_rating": 4.2,
+  "min_book_year": 2015,
+  "exclude_terms": [
+   "Starbucks"
+  ],
+  "amenity_unit_budget_usd": 15
+ }
+}

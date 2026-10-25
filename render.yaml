@@ -1,0 +1,19 @@
+# Render Blueprint. Nothing here is deployed until you create the service in Render yourself.
+services:
+  - type: web
+    name: vibespec
+    runtime: python
+    plan: free                      # verify in the Render dashboard; Free spins down after 15 min idle (~1 min cold start)
+    buildCommand: echo "stdlib only, nothing to install"
+    startCommand: python -m vibespec  # binds 0.0.0.0:$PORT (Render sets PORT=10000)
+    healthCheckPath: /healthz
+    autoDeployTrigger: "off"
+    envVars:
+      - key: QLOO_API_KEY
+        sync: false                 # enter in the Render dashboard; never commit
+      - key: VIBESPEC_TRUST_PROXY
+        value: "1"                  # use X-Forwarded-For for per-IP limits (only valid behind Render's proxy)
+      - key: VIBESPEC_DAILY_CALL_CAP
+        value: "300"                # live Qloo calls/day across all visitors; keep below your key's quota
+      - key: VIBESPEC_JOB_TIMEOUT
+        value: "150"

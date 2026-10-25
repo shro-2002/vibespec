@@ -1,0 +1,13 @@
+# --- secrets / Qloo data / private material: never publish ---
+.env*
+.cache/
+.cache_llm/
+private/
+fixtures/
+results.json
+RAW_RUN.md
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+.DS_Store

@@ -1,0 +1,16 @@
+{
+ "concept": "Design-led 30-room hotel for quiet, detail-obsessed travellers",
+ "city": "London",
+ "anchors": [
+  "Aesop",
+  "Muji"
+ ],
+ "goals": "calm sound, a considered small library, natural amenities, local places to explore",
+ "constraints": {
+  "max_place_price_level": 3,
+  "min_place_rating": 4.0,
+  "min_book_year": 2010,
+  "exclude_terms": [],
+  "amenity_unit_budget_usd": 30
+ }
+}

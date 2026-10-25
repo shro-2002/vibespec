@@ -1,0 +1,19 @@
+{
+ "concept": "Creative youth boutique hotel mixing workwear and apothecary calm",
+ "city": "New York City",
+ "anchors": [
+  "Carhartt",
+  "Aesop"
+ ],
+ "goals": "music with grit and warmth, literature, amenity brands, local culture to explore on foot",
+ "constraints": {
+  "max_place_price_level": 3,
+  "min_place_rating": 4.3,
+  "min_book_year": 2012,
+  "exclude_terms": [
+   "Marriott",
+   "Starbucks"
+  ],
+  "amenity_unit_budget_usd": 40
+ }
+}

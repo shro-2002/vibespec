@@ -1,0 +1,16 @@
+{
+ "concept": "Affordable design-forward hotel for young professionals",
+ "city": "Chicago",
+ "anchors": [
+  "IKEA",
+  "Muji"
+ ],
+ "goals": "upbeat but tidy playlist, accessible reads, practical amenity brands, local culture and dining",
+ "constraints": {
+  "max_place_price_level": 2,
+  "min_place_rating": 4.2,
+  "min_book_year": 2015,
+  "exclude_terms": [],
+  "amenity_unit_budget_usd": 10
+ }
+}

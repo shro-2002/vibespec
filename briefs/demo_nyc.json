@@ -1,0 +1,4 @@
+{"concept": "Quiet 40-room boutique hotel for creative travellers", "city": "New York City",
+ "anchors": ["Muji", "Aesop", "Patagonia"],
+ "goals": "calm minimalist sound, a small library, natural amenities, local places to explore on foot",
+ "constraints": {"max_place_price_level": 2, "min_place_rating": 4.2, "min_book_year": 2012, "exclude_terms": ["Starbucks"], "amenity_unit_budget_usd": 20}}

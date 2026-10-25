@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VibeSpec</title>
+<meta name="description" content="Evidence-backed cultural experience blueprints for boutique hotels, powered by Qloo.">
+<style>
+:root{--bg:#f5f1ea;--card:#fffdf9;--ink:#1d1b18;--mute:#6b645b;--line:#ddd5c8;--accent:#a4442b;--ok:#2f6b4f;--warn:#8a5a00;--bad:#9b2c2c;
+--serif:Georgia,"Iowan Old Style","Times New Roman",serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#171512;--card:#211e1a;--ink:#f1ebe0;--mute:#a79f92;--line:#383229;--accent:#e08a6c;--ok:#7fc4a1;--warn:#e0b45c;--bad:#e58a8a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans)}
+main{max-width:980px;margin:0 auto;padding:32px 16px 80px}
+h1{font:400 clamp(2rem,5vw,3.2rem)/1.05 var(--serif);margin:0 0 8px;letter-spacing:-.02em}
+h1 em{color:var(--accent);font-style:italic}
+.lede{color:var(--mute);max-width:60ch;margin:0 0 28px}
+form{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.full{grid-column:1/-1}label{display:grid;gap:4px;font-size:.85rem;color:var(--mute);font-weight:600}
+input,textarea{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:8px;padding:10px;min-height:44px}
+input:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+fieldset{border:1px dashed var(--line);border-radius:10px;padding:12px;display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+legend{font-size:.85rem;color:var(--mute);font-weight:600;padding:0 6px}
+button{font:inherit;font-weight:600;border-radius:999px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);padding:11px 22px;min-height:44px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink)}button:disabled{opacity:.5;cursor:wait}
+#status{min-height:1.5em;color:var(--mute);margin:14px 0}
+.err{color:var(--bad)}.chap{margin-top:34px}.chap h2{font:400 1.6rem var(--serif);margin:0 0 4px}.chap h2 span{color:var(--accent);font-style:italic;margin-right:8px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));margin-top:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h3{margin:0 0 4px;font:600 1.05rem var(--serif)}.meta{color:var(--mute);font-size:.85rem}
+.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:8px 0;background:var(--line)}.bar i{display:block;height:100%}
+.tag{display:inline-block;font-size:.75rem;border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:2px 4px 2px 0;color:var(--mute)}
+.warn{color:var(--warn)}.rej{color:var(--bad);font-size:.9rem}ul.plain{padding-left:18px;margin:6px 0}
+details{margin-top:10px}summary{cursor:pointer;color:var(--mute);min-height:32px}
+.infl{width:100%;border-collapse:collapse;font-size:.9rem}.infl th,.infl td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+@media (prefers-reduced-motion:no-preference){.card{transition:transform .15s}.card:hover{transform:translateY(-2px)}}
+</style>
+</head>
+<body>
+<main>
+<h1>Vibe<em>Spec</em></h1>
+<p class="lede">Name two or three cultural anchors. An agent queries Qloo across music, books, amenity brands and places, checks your constraints, revises when evidence demands it, and hands back an inspectable blueprint. Qloo gives cultural affinity only — no prices, inventory, or revenue claims.</p>
+
+<form id="f" novalidate>
+  <label>Hotel concept<input name="concept" maxlength="500" placeholder="Quiet 40-room hotel for creative travellers" required></label>
+  <label>City<input name="city" maxlength="80" placeholder="New York City" required></label>
+  <label class="full">Cultural anchors (2–3, comma separated brands)<input name="anchors" placeholder="Muji, Aesop, Patagonia" required></label>
+  <label class="full">Guest experience goals<textarea name="goals" rows="2" maxlength="800" placeholder="calm sound, a small library, natural amenities, places to explore on foot"></textarea></label>
+  <fieldset class="full"><legend>Optional constraints (checked against Qloo data where it exists)</legend>
+    <label>Max place price level (1–4)<input name="max_place_price_level" type="number" min="1" max="4"></label>
+    <label>Min place rating (0–5)<input name="min_place_rating" type="number" min="0" max="5" step="0.1"></label>
+    <label>Books published since<input name="min_book_year" type="number" min="1800" max="2100"></label>
+    <label>Amenity unit budget, USD (your assumption)<input name="amenity_unit_budget_usd" type="number" min="0" step="1"></label>
+    <label>Exclude terms (comma separated)<input name="exclude_terms" placeholder="Starbucks, chain"></label>
+  </fieldset>
+  <div class="full"><button id="go" type="submit">Build blueprint</button></div>
+</form>
+<div id="status" role="status" aria-live="polite"></div>
+<div id="out"></div>
+</main>
+<script>
+const $=s=>document.querySelector(s), COLORS=['#a4442b','#2f6b4f','#3b5a8c','#8a5a00'];
+let confirmed={};
+function el(tag,attrs={},...kids){const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){k==='class'?e.className=v:k==='style'?e.style.cssText=v:e.setAttribute(k,v)}
+  for(const c of kids.flat())if(c!=null)e.append(c.nodeType?c:document.createTextNode(String(c)));return e}
+function body(){const d=Object.fromEntries(new FormData($('#f')));const c={};
+  for(const k of['max_place_price_level','min_place_rating','min_book_year','amenity_unit_budget_usd','exclude_terms'])c[k]=d[k]||null;
+  return{concept:d.concept,city:d.city,anchors:d.anchors.split(',').map(s=>s.trim()).filter(Boolean),goals:d.goals,constraints:c,confirmed}}
+$('#f').addEventListener('submit',async ev=>{ev.preventDefault();await submit()});
+const LABEL={resolve_anchor:a=>`Resolving anchor “${a}”`,query_domain:()=>'Querying Qloo: music, books, brands, places',validate_constraints:a=>`Checking your constraints: ${a}`,
+  revise_query:a=>`Revising the ${a} query from rejection evidence`,audit_influence:()=>'Auditing how much each anchor mattered',halt_for_confirmation:()=>'Waiting for anchor confirmation',finish:()=>'Assembling blueprint'};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function showProgress(j){const ol=el('ol',{id:'progress'});
+  if(j.status==='queued')ol.append(el('li',{},`Queued${j.queued_ahead?` — ${j.queued_ahead} run(s) ahead`:''}…`));
+  for(const s of j.steps)ol.append(el('li',{},(LABEL[s.tool]||(()=>s.tool))(s.arg),s.phase==='done'?` — ${s.outcome} (${s.t}s)`:' …'));
+  $('#out').replaceChildren(ol);$('#status').textContent=`Working… ${j.elapsed_s}s (real agent steps shown; typical cold run 30–70s)`}
+async function submit(){const go=$('#go'),st=$('#status');go.disabled=true;st.className='';st.textContent='Submitting…';$('#out').replaceChildren();
+  try{const r=await fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body())});const j=await r.json();
+    if(!r.ok){fail(j.error||'Request failed');return}
+    let fails=0;
+    for(;;){await sleep(1200);let p;
+      try{const pr=await fetch('/api/jobs/'+j.job_id);if(pr.status===404){fail('The server restarted or the job expired. Please run it again.');return}
+        if(pr.status===429){await sleep(2000);continue}p=await pr.json();fails=0}catch(e){if(++fails>5){fail('Lost connection to the server.');return}continue}
+      if(p.status==='queued'||p.status==='running'){showProgress(p);continue}
+      $('#out').replaceChildren();
+      if(p.status==='timeout'){fail('The run hit its time limit before finishing. Qloo may be slow right now.');return}
+      if(p.status==='failed'||!p.result){fail(p.error||'The run failed.');return}
+      st.textContent='';render(p.result);return}
+  }catch(e){fail('Network error.')}finally{go.disabled=false}}
+function fail(msg){const st=$('#status');st.className='err';st.textContent=msg+' ';const b=el('button',{type:'button',class:'ghost'},'Retry');b.onclick=()=>submit();st.append(b)}
+function bar(att,names){const tot=Object.values(att).reduce((a,b)=>a+b,0)||1;return el('div',{class:'bar',role:'img','aria-label':'Anchor attribution'},
+  names.map((n,i)=>att[n]?el('i',{style:`width:${att[n]/tot*100}%;background:${COLORS[i%4]}`,title:`${n} ${Math.round(att[n]/tot*100)}%`}):null))}
+function render(bp){const out=$('#out');
+  if(bp.status==='needs_confirmation'){const box=el('section',{class:'card'},el('h2',{},'Please confirm your anchors'));
+    for(const c of bp.confirmations_needed){const g=el('fieldset',{},el('legend',{},`“${c.query}” — ${c.note}`));
+      for(const cand of c.candidates)g.append(el('label',{},el('span',{},`${cand.name}`+(cand.disambiguation?` — ${cand.disambiguation}`:'')),el('input',{type:'radio',name:'c_'+c.query,value:cand.id})));
+      box.append(g)}
+    box.append(el('button',{type:'button'},'Confirm and rebuild'));box.lastChild.onclick=()=>{for(const c of bp.confirmations_needed){const v=document.querySelector(`input[name="c_${CSS.escape(c.query)}"]:checked`);if(v)confirmed[c.query]=v.value}submit()};
+    out.append(box);return}
+  if(bp.status!=='complete'){out.append(el('p',{class:'err'},'The agent could not complete this brief.'));return}
+  const names=bp.anchors.map(a=>a.name);
+  out.append(el('div',{class:'meta'},'Anchors (bar colours): ',bp.anchors.map((a,i)=>el('span',{style:`margin-right:12px;white-space:nowrap`},el('b',{style:`color:${COLORS[i%4]}`},'■ '),`${a.name} (${a.match})`))));
+  let n=0;
+  for(const[d,dom]of Object.entries(bp.domains)){n++;const sec=el('section',{class:'chap'},el('h2',{},el('span',{},String(n).padStart(2,'0')),dom.label));
+    for(const a of dom.anchors_ignored)sec.append(el('p',{class:'warn'},`Anchor “${a}” was accepted by Qloo but contributed nothing here.`));
+    for(const[a,w]of Object.entries(dom.anchors_rejected))sec.append(el('p',{class:'warn'},`Anchor “${a}”: ${w}`));
+    const g=el('div',{class:'grid'});
+    for(const p of dom.selected){g.append(el('article',{class:'card'},el('h3',{},p.name),
+      p.props.address?el('div',{class:'meta'},p.props.address+(p.geo?` · ${p.geo.lat.toFixed(4)}, ${p.geo.lon.toFixed(4)}`:'')):null,
+      bar(p.attribution,names),el('div',{class:'meta'},p.why),
+      p.unverified.length?el('div',{class:'warn meta'},'Unverified: '+p.unverified.join('; ')):null,
+      el('div',{},p.tags.map(t=>el('span',{class:'tag'},t)))))}
+    sec.append(g);
+    if(dom.rejected.length)sec.append(el('details',{},el('summary',{},`${dom.rejected.length} rejected alternatives`),el('ul',{class:'plain'},dom.rejected.map(r=>el('li',{class:'rej'},`${r.name}: ${r.reasons.join('; ')}`)))));
+    out.append(sec)}
+  const inf=bp.anchor_influence.leave_one_out_set_change,t=el('table',{class:'infl'},el('thead',{},el('tr',{},el('th',{},'Domain'),names.map(n=>el('th',{},`Drop ${n}`)))));
+  const tb=el('tbody');for(const[d,row]of Object.entries(inf))if(d!=='_skipped')tb.append(el('tr',{},el('th',{},d),names.map(n=>el('td',{},row[n]==null?'–':row[n]))));t.append(tb);
+  out.append(el('section',{class:'chap'},el('h2',{},el('span',{},'◦'),'Did the anchors matter?'),el('p',{class:'meta'},'Share of the candidate set that changes when an anchor is removed (0 = no effect). Measures influence on the candidate pool, not quality.'),t));
+  out.append(el('section',{class:'chap'},el('h2',{},el('span',{},'◦'),'Budget & missing data'),el('p',{},bp.budget.disclaimer),el('ul',{class:'plain'},bp.missing_data.map(m=>el('li',{class:'warn'},m)))));
+  out.append(el('details',{},el('summary',{},'Agent decision trace'),el('ol',{},bp.trace.map(s=>el('li',{},`${s.tool}${s.arg?`(${s.arg})`:''} — ${s.outcome}`)))));
+  const dl=(name,type,text)=>{const b=el('button',{type:'button',class:'ghost'},name);b.onclick=()=>{const a=el('a',{href:URL.createObjectURL(new Blob([text],{type})),download:name.includes('JSON')?'blueprint.json':'blueprint.md'});a.click()};return b};
+  if(bp.provenance)out.append(el('p',{class:'meta'},`Data: ${bp.provenance.live_calls} live Qloo calls, ${bp.provenance.cache_hits} served from the server's private cache (real earlier Qloo responses).`));
+  const {markdown,...plain}=bp;out.append(el('div',{class:'actions'},dl('Download Markdown','text/markdown',markdown),dl('Download JSON','application/json',JSON.stringify(plain,null,2))))}
+</script>
+</body>
+</html>
