@@ -61,4 +61,5 @@
   }
   $("#f").addEventListener("submit", (e) => { e.preventDefault(); run(); });
   $("#edit").addEventListener("click", toForm);
+  $("#run-example").addEventListener("click", () => { VS.form.fillExample(); run(); });
 })();

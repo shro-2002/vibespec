@@ -155,7 +155,7 @@ details.opt .fields{margin-top:14px}
 
 /* ---- blueprint ---- */
 .summary{padding:34px 0 8px}
-.summary h1{font-size:clamp(1.7rem,3.4vw,2.5rem);max-width:24ch}
+.cover h1{margin-top:6px;font-size:clamp(1.7rem,3.4vw,2.5rem);max-width:24ch}
 .anchor-row{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
 .tag{display:inline-flex;align-items:center;gap:6px;border-radius:var(--r-chip);padding:3px 10px;font-size:.84rem;font-weight:600;color:#fff}
 .stats{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:18px}
@@ -302,3 +302,33 @@ body[data-view=result] .run-bar{padding:8px 0;background:transparent;border-bott
 .loc-row input{flex:1 1 220px}
 .loc-status{font-size:.85rem;color:var(--ink2);min-height:1.3em}
 .loc-status.ok{color:var(--moss)}.loc-status.bad{color:var(--bad)}
+:root{--ph-discover:var(--slate);--ph-fit:var(--moss);--ph-revise:var(--clay)}
+.cta-note{margin-top:12px;max-width:52ch}
+.how li.ph-discover{border-top:4px solid var(--ph-discover)}.how li.ph-fit{border-top:4px solid var(--ph-fit)}.how li.ph-revise{border-top:4px solid var(--ph-revise)}
+.how li.ph-discover .n{color:var(--ph-discover)}.how li.ph-fit .n{color:var(--ph-fit)}.how li.ph-revise .n{color:var(--ph-revise)}
+.phase{display:inline-block;font-size:.72rem;font-weight:700;border-radius:999px;padding:1px 9px;margin-left:6px;vertical-align:middle;border:1.5px solid currentColor}
+.phase.ph-discover{color:var(--ph-discover)}.phase.ph-fit{color:var(--ph-fit)}.phase.ph-revise{color:var(--ph-revise)}.phase.ph-evidence{color:var(--mute)}
+.legend{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;font-size:.86rem;color:var(--ink2);margin-top:14px}
+.fit-row.aff{border-left:3px solid var(--ph-discover);padding-left:10px;border-top:0}
+.fit-row.good,.fit-row.unk,.fit-row.none{border-left:3px solid var(--ph-fit);padding-left:10px}
+.fit-row.gap,.fit-row.ver{border-left:3px solid var(--line);padding-left:10px}
+.rev-note{margin-top:12px;padding:10px 14px;border-radius:10px;border-left:4px solid var(--ph-revise);background:var(--linen);font-size:.9rem;color:var(--ink2)}
+.rev-note b{color:var(--ph-revise)}
+.revision{border-left-color:var(--ph-revise)}
+/* proposal cover */
+.cover{background:var(--linen);border:1px solid var(--line);border-radius:var(--r-panel);padding:28px clamp(18px,4vw,40px);margin-top:8px}
+.cover .doc{font:600 .95rem var(--display);color:var(--clay)}
+.cover .meta{color:var(--mute);font-size:.9rem;margin-top:6px}
+.execsum{display:grid;gap:18px;margin-top:22px}
+@media (min-width:860px){.execsum{grid-template-columns:1.3fr 1fr}}
+.execsum h2{font-size:1.15rem;margin-bottom:8px}
+.execsum ul{margin:0;padding-left:18px;color:var(--ink2)}
+.execsum li{margin:4px 0}
+.execsum .checks{border-left:3px solid var(--bad);padding-left:14px}
+@media print{
+  .top,.bpnav,.export,.lens-bar,.run-bar,.skip-map,.mapbox,.foot,.live,details.considered>summary~*{display:none!important}
+  body{background:#fff;color:#000;font-size:11pt}.cover,.pick-card,.sec-head{box-shadow:none;break-inside:avoid}
+  .picks{grid-template-columns:1fr 1fr}.pick-card details{display:none}.bp-sec{break-before:page}
+}
+.phase{margin-left:8px}
+.fit-row b .phase{font-size:.68rem}

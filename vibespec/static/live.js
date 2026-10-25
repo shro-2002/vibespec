@@ -2,13 +2,14 @@
 (() => {
   const { el, $ } = VS;
   const STAGES = [
-    { tool: "resolve_anchor", title: "Resolve anchors", desc: "Match each brand to a Qloo entity" },
-    { tool: "query_domain", title: "Retrieve from Qloo", desc: "Music, books, brands and places in parallel" },
-    { tool: "validate_constraints", title: "Check fit with your brief", desc: "Constraints, then suitability for this hotel" },
-    { tool: "revise_query", title: "Revise from evidence", desc: "Only when too few candidates pass", optional: true },
-    { tool: "audit_influence", title: "Audit anchor influence", desc: "Re-query without each anchor" },
-    { tool: "finish", title: "Assemble blueprint", desc: "Rank, balance and explain" },
+    { tool: "resolve_anchor", title: "Resolve anchors", desc: "Match each brand to a Qloo entity", ph: "discover" },
+    { tool: "query_domain", title: "Retrieve from Qloo", desc: "Music, books, brands and places in parallel", ph: "discover" },
+    { tool: "validate_constraints", title: "Check fit with your brief", desc: "Constraints, then suitability for this hotel", ph: "fit" },
+    { tool: "revise_query", title: "Revise from evidence", desc: "Only when too few candidates fit", optional: true, ph: "revise" },
+    { tool: "audit_influence", title: "Audit anchor influence", desc: "Re-query without each anchor", ph: "evidence" },
+    { tool: "finish", title: "Assemble proposal", desc: "Rank, balance and explain", ph: "evidence" },
   ];
+  const PH = { discover: "Discovery", fit: "Fit check", revise: "Revision", evidence: "Evidence" };
   const DOMAIN_NAME = Object.fromEntries(VS.DOMAINS.map((d) => [d.key, d.title]));
   let timer = null, startedAt = 0, logOpen = false;
 
@@ -39,7 +40,7 @@
   function stagesList(job) {
     const states = stageStates(job);
     return el("ol", { class: "stages", "aria-label": "Agent stages" }, STAGES.map((s, i) => el("li", { class: `stage ${states[i] === "skipped" ? "pending" : states[i]}` },
-      el("span", { class: "dot", "aria-hidden": "true" }), el("div", {}, el("b", {}, s.title), el("small", {}, states[i] === "pending" || states[i] === "skipped" ? `${label[states[i]]}${states[i] === "pending" ? `: ${s.desc}` : ""}` : `${label[states[i]]}: ${s.desc}`)))));
+      el("span", { class: "dot", "aria-hidden": "true" }), el("div", {}, el("b", {}, s.title, el("span", { class: `phase ph-${s.ph}` }, PH[s.ph])), el("small", {}, states[i] === "pending" || states[i] === "skipped" ? `${label[states[i]]}${states[i] === "pending" ? `: ${s.desc}` : ""}` : `${label[states[i]]}: ${s.desc}`)))));
   }
 
   function anchorsPanel(job) {

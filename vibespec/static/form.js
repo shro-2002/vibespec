@@ -5,7 +5,7 @@
   const EXAMPLE = {
     concept: "Minimalist, eco-conscious 40-room boutique hotel for mindful travellers", city: "New York City",
     anchors: ["Muji", "Patagonia"], goals: "Calm minimalist sound, a small library of nature and sustainability books, natural low-waste amenities, local places to explore on foot",
-    max_place_price_level: "3", min_place_rating: "4.0", min_book_year: "2012", amenity_unit_budget_usd: "30", exclude_terms: "Starbucks",
+    max_place_price_level: "3", min_place_rating: "4.0", min_book_year: "2012", amenity_unit_budget_usd: "30", exclude_terms: "Starbucks", hotel_location: "40.7223, -73.9874",
   };
   const form = $("#f"), box = $("#chips"), input = $("#anchor-in"), err = $("#anchor-err");
   let anchors = [];
@@ -91,6 +91,5 @@
     summary: () => { const b = VS.form.body(); return `${b.city}. Anchors: ${b.anchors.join(", ")}.`; },
   };
   $("#fill").addEventListener("click", VS.form.fillExample);
-  $("#use-example").addEventListener("click", () => { VS.form.fillExample(); $("#compose").scrollIntoView(); $("#go").focus({ preventScroll: true }); });
   draw();
 })();

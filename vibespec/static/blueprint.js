@@ -34,9 +34,9 @@
     const shares = el("div", { class: "shares" }, names.filter((n) => p.attribution[n]).map((n) => { const i = names.indexOf(n), sw = el("span", { class: "sw" }); sw.style.background = VS.ANCHOR_VAR[i]; return el("span", {}, sw, `${n} ${pct(p.attribution[n])}`); }));
     return el("div", {}, bar, shares, single ? el("p", { class: "hint" }, "Only one anchor was usable here, so 100% is trivial.") : null);
   }
-  function block(title, items, cls, empty) {
+  function block(title, items, cls, empty, phase) {
     const list = items && items.length ? items : empty ? [empty] : [];
-    return list.length ? el("div", { class: `fit-row ${cls}${items && items.length ? "" : " none"}` }, el("b", {}, title), el("ul", {}, list.map((x) => el("li", {}, x)))) : null;
+    return list.length ? el("div", { class: `fit-row ${cls}${items && items.length ? "" : " none"}` }, el("b", {}, title, phase ? el("span", { class: "phase ph-fit" }, phase) : null), el("ul", {}, list.map((x) => el("li", {}, x)))) : null;
   }
   function card(domain, p, names, single) {
     const st = p.suitability || { label: "", use: "", fit: [], verified: [], unknowns: p.unverified, gaps: [], verdict: "unverified", next_action: "" };
@@ -46,8 +46,8 @@
       facts(domain, p) ? el("p", { class: "facts" }, facts(domain, p)) : null,
       el("p", { class: `verdict ${lead ? "lead" : st.verdict}` }, st.label),
       st.use ? el("p", { class: "use" }, el("b", {}, "Use: "), st.use) : null,
-      el("div", { class: "fit-row aff" }, el("b", {}, "Why Qloo surfaced it (cultural affinity, not fit)"), p.surfaced ? el("p", { class: "hint" }, p.surfaced) : null, attribution(p, names, single)),
-      block("Why it fits your brief", st.fit, "good", "No positive fit evidence yet"),
+      el("div", { class: "fit-row aff" }, el("b", {}, "Why Qloo surfaced it", el("span", { class: "phase ph-discover" }, "Discovery")), p.surfaced ? el("p", { class: "hint" }, p.surfaced) : null, attribution(p, names, single)),
+      block("Why it fits your brief", st.fit, "good", "No positive fit evidence yet", "Fit check"),
       block("In Qloo data, not confirmed", st.verified, "ver"),
       block("Missing fit evidence", st.unknowns, "unk"),
       block("Check before using", st.gaps, "gap"),
@@ -77,6 +77,7 @@
     return el("section", { class: "bp-sec", id: d.id, "aria-labelledby": `h-${d.id}` }, el("div", { class: "wrap" },
       el("div", { class: `sec-head ${d.cls}` }, el("div", {}, el("h2", { id: `h-${d.id}` }, ICONS[d.key](), d.title), el("p", {}, d.blurb)), funnel(dom)),
       notices.map((n) => el("p", { class: "notice" }, el("b", {}, "Signal gap. "), n)),
+      bp.trace.filter((t) => t.tool === "revise_query" && t.arg === d.key).map((t) => el("p", { class: "rev-note" }, el("b", {}, "Agent revision. "), String(t.outcome).replace(/^\w+: /, "").replace(" -> ", ": "))),
       dom.selected.length ? el("div", { class: "picks" }, dom.selected.map((p) => card(d.key, p, names, single)))
         : el("div", { class: "empty" }, dom.anchors_rejected && Object.keys(dom.anchors_rejected).length === names.length ? "Qloo found no usable signal for any of your anchors in this section, so there are no recommendations." : dom.rejected.length ? "Every candidate failed your constraints. Relax them and rebuild." : "No recommendations came back for this section."),
       considered(dom)));
@@ -88,7 +89,8 @@
   function exportRow(bp) {
     const { markdown, ...plain } = bp;
     return el("div", { class: "export", id: "export" }, el("button", { class: "btn", type: "button", onclick: () => download("vibespec-blueprint.md", "text/markdown", markdown) }, "Download Markdown"),
-      el("button", { class: "btn ghost", type: "button", onclick: () => download("vibespec-blueprint.json", "application/json", JSON.stringify(plain, null, 2)) }, "Download JSON"));
+      el("button", { class: "btn ghost", type: "button", onclick: () => download("vibespec-blueprint.json", "application/json", JSON.stringify(plain, null, 2)) }, "Download JSON"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => window.print() }, "Print or save as PDF"));
   }
 
   VS.blueprint = {
@@ -97,12 +99,27 @@
       const sum = (f) => doms.reduce((s, d) => s + f(d), 0), prov = bp.provenance || {};
       const stats = [[sum((d) => d.selected.length), "picks selected"], [sum((d) => d.pool_size), "candidates examined"], [sum((d) => d.rejected.length) + sum((d) => (d.off_brief || []).length), "rejected as unfit or off-brief"],
         [(prov.live_calls || 0) + (prov.cache_hits || 0), `Qloo requests (${prov.live_calls || 0} live)`]];
-      const summary = el("section", { class: "summary reveal", "aria-labelledby": "h-sum" }, el("div", { class: "wrap" },
-        el("h1", { id: "h-sum", tabindex: "-1" }, bp.brief.concept || "Cultural experience blueprint"),
-        el("p", { class: "lede" }, `${bp.brief.city}. Built from ${names.length} anchors by a rule-based agent, using Qloo responses. ` +
-          (bp.brief.constraints.hotel_lat != null ? `Distances are straight-line from ${bp.brief.constraints.hotel_lat.toFixed(4)}, ${bp.brief.constraints.hotel_lon.toFixed(4)}.` : "No exact hotel location was given, so places are city-level leads with no walking times.")),
+      const sel = (d) => bp.domains[d.key].selected;
+      const lines = VS.DOMAINS.map((d) => {
+        const ps = sel(d), fit = ps.filter((p) => (p.suitability || {}).verdict === "aligned").length, leads = ps.filter((p) => /lead/i.test((p.suitability || {}).label || "")).length;
+        const rev = bp.trace.filter((t) => t.tool === "revise_query" && t.arg === d.key).length;
+        return `${d.title}: ${ps.length} ${ps.length === 1 ? "pick" : "picks"}, ${fit} with positive fit evidence${leads ? `, ${leads} ${leads === 1 ? "lead" : "leads"} to verify` : ""}${rev ? `; the agent revised this section ${rev === 1 ? "once" : `${rev} times`}` : ""}.`;
+      });
+      const gapCount = {};
+      VS.DOMAINS.forEach((d) => sel(d).forEach((p) => ((p.suitability || {}).gaps || []).forEach((g) => { const k = g.split(":")[0]; gapCount[k] = (gapCount[k] || 0) + 1; })));
+      const checks = Object.entries(gapCount).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([g, n]) => `${g} (${n} ${n === 1 ? "pick" : "picks"})`);
+      const loc = bp.brief.constraints.hotel_lat != null ? `Distances are straight-line from ${bp.brief.constraints.hotel_lat.toFixed(4)}, ${bp.brief.constraints.hotel_lon.toFixed(4)}.` : "No exact hotel location was given, so places are city-level leads with no walking times.";
+      const summary = el("section", { class: "summary reveal", "aria-labelledby": "h-sum" }, el("div", { class: "wrap" }, el("div", { class: "cover" },
+        el("p", { class: "doc" }, "Cultural experience proposal"),
+        el("h1", { id: "h-sum", tabindex: "-1" }, bp.brief.concept || "Boutique hotel"),
+        el("p", { class: "meta" }, `${bp.brief.city}. Prepared ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })} from Qloo data by a rule-based agent. ${loc}`),
         el("div", { class: "anchor-row" }, names.map((n, i) => { const t = el("span", { class: "tag" }, n); t.style.background = VS.ANCHOR_VAR[i]; return t; })),
-        el("div", { class: "stats" }, stats.map(([n, l]) => el("div", { class: "stat" }, el("b", {}, n), el("span", {}, l)))), exportRow(bp)));
+        el("div", { class: "execsum" },
+          el("div", {}, el("h2", {}, "Summary"), el("ul", {}, lines.map((x) => el("li", {}, x)))),
+          checks.length ? el("div", { class: "checks" }, el("h2", {}, "Before you act"), el("ul", {}, checks.map((x) => el("li", {}, x)))) : null),
+        el("div", { class: "legend", "aria-label": "How to read this proposal" }, el("span", {}, el("span", { class: "phase ph-discover" }, "Discovery"), " what Qloo found"),
+          el("span", {}, el("span", { class: "phase ph-fit" }, "Fit check"), " evidence for your brief"), el("span", {}, el("span", { class: "phase ph-revise" }, "Revision"), " where the agent re-queried")),
+        el("div", { class: "stats" }, stats.map(([n, l]) => el("div", { class: "stat" }, el("b", {}, n), el("span", {}, l)))), exportRow(bp))));
       const nav = el("nav", { class: "bpnav", "aria-label": "Blueprint sections" }, el("div", { class: "wrap" }, el("a", { href: "#influence" }, "Anchor influence"),
         VS.DOMAINS.map((d) => el("a", { href: `#${d.id}` }, d.title)), el("a", { href: "#notes" }, "Evidence notes"), el("a", { href: "#trace" }, "Agent trace")));
       const budgetRows = bp.budget.indicative_qloo_brand_price_ranges;
