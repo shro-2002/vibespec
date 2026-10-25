@@ -5,6 +5,7 @@ from dataclasses import asdict
 from typing import Any
 
 from .qloo import Candidate
+from .suitability import as_dict
 
 NO_VERIFIED = ("No supplier prices, inventory, contractual rights, or revenue impact were verified. Qloo supplies cultural affinity "
                "and descriptive metadata only.")
@@ -14,31 +15,48 @@ def _affinity(c: Candidate) -> float:
     return c.affinity if c.affinity is not None else 0.0
 
 
-def select(accepted: list[Candidate], k: int, anchor_ids: list[str]) -> list[Candidate]:
-    """Highest in-query affinity, but first guarantee each contributing anchor leads at least one pick (coherence)."""
-    ranked = sorted(accepted, key=_affinity, reverse=True)
+TIER = {"aligned": 0, "unverified": 1}
+
+
+def rank(accepted: list[Candidate], fit: dict | None = None) -> list[Candidate]:
+    """Stage B decides the order: positive fit evidence first, then unverified; affinity only breaks ties within a tier."""
+    fit = fit or {}
+    def tier(c: Candidate) -> int:
+        f = fit.get(c.id)
+        return 2 if getattr(f, "discovery_lead", False) else TIER.get(getattr(f, "verdict", "unverified"), 1)
+    return sorted(accepted, key=lambda c: (tier(c), -_affinity(c)))
+
+
+def select(accepted: list[Candidate], k: int, anchor_ids: list[str], fit: dict | None = None) -> list[Candidate]:
+    """Best Stage B tier first; within it, each contributing anchor leads at least one pick (coherence)."""
+    ranked = rank(accepted, fit)
+    best_tier = [c for c in ranked if TIER.get(getattr((fit or {}).get(c.id), "verdict", "unverified"), 1) == 0] or ranked
     chosen: list[Candidate] = []
     for a in anchor_ids:
-        lead = next((c for c in ranked if c not in chosen and c.attribution and max(c.attribution, key=c.attribution.get) == a), None)
+        lead = next((c for c in best_tier if c not in chosen and c.attribution and max(c.attribution, key=c.attribution.get) == a), None)
         if lead and len(chosen) < k:
             chosen.append(lead)
     chosen += [c for c in ranked if c not in chosen][: k - len(chosen)]
-    return sorted(chosen, key=_affinity, reverse=True)
+    return [c for c in ranked if c in chosen]
 
 
 def _shares(c: Candidate, names: dict[str, str]) -> dict[str, float]:
     return {names[i]: round(v, 3) for i, v in c.attribution.items() if i in names}
 
 
-def _pick(c: Candidate, rank: int, n: int, names: dict[str, str], checks: list[str], unverified: list[str]) -> dict[str, Any]:
+def _pick(c: Candidate, rank: int, n: int, names: dict[str, str], checks: list[str], unverified: list[str], fit=None, alternative=None) -> dict[str, Any]:
     sh = _shares(c, names)
     primary = max(sh, key=sh.get) if sh else None
     pct = ", ".join(f"{a} {v:.0%}" for a, v in sh.items()) or "no per-anchor attribution returned"
     why = f"Ranked #{rank} of {n} acceptable results in this query. Anchor attribution: {pct}."
     if checks:
         why += (" Constraints met (where data existed): " if unverified else " Constraints met: ") + "; ".join(checks) + "."
-    return {"id": c.id, "name": c.name, "rank_in_query": rank, "of": n, "attribution": sh, "primary_anchor": primary, "why": why,
-            "unverified": unverified, "props": dict(c.props), "geo": dict(c.geo) if c.geo else None, "tags": list(c.tags[:6])}
+    out = {"id": c.id, "name": c.name, "rank_in_query": rank, "of": n, "attribution": sh, "primary_anchor": primary, "why": why,
+           "unverified": unverified, "props": dict(c.props), "geo": dict(c.geo) if c.geo else None, "tags": list(c.tags[:6])}
+    if fit is not None:  # Stage B: kept separate from the affinity evidence above
+        out["suitability"] = {**as_dict(fit), "unknowns": list(dict.fromkeys(fit.unknowns + unverified))}
+        out["alternative"] = alternative
+    return out
 
 
 def _checks_run(d: str, cons) -> list[str]:
@@ -74,17 +92,21 @@ def build(s) -> dict[str, Any]:
     missing = out["missing_data"]
     for d, r in s.results.items():
         v = s.verdict[d]
-        sel = select(v["accepted"], s.picks[d], [i for i in r.effective if i not in r.ignored])
-        ranked = sorted(v["accepted"], key=_affinity, reverse=True)
+        sel = select(v["accepted"], s.picks[d], [i for i in r.effective if i not in r.ignored], s.fit)
+        ranked = sorted(v["accepted"], key=_affinity, reverse=True)  # affinity rank, reported as Stage A evidence only
+        spare = [c for c in rank(v["accepted"], s.fit) if c not in sel]
         checks = _checks_run(d, b.constraints)
-        picks = [_pick(c, ranked.index(c) + 1, len(ranked), names, checks, v["unverified"].get(c.id, [])) for c in sel]
+        picks = [_pick(c, ranked.index(c) + 1, len(ranked), names, checks, v["unverified"].get(c.id, []), s.fit.get(c.id),
+                       {"name": spare[i].name, "label": s.fit[spare[i].id].label} if i < len(spare) and spare[i].id in s.fit else None)
+                 for i, c in enumerate(sel)]
         outranked = [{"name": c.name, "rank_in_query": ranked.index(c) + 1, "reason": "acceptable but outranked or not needed for anchor balance"}
-                     for c in ranked if c not in sel][:5]
-        rejected = [{"name": c.name, "reasons": [reason for _, reason in bad]} for c, bad in v["rejected"]]
+                     for c in spare][:5]
+        rejected = list({c.name: {"name": c.name, "reasons": [reason for _, reason in bad]} for c, bad in v["rejected"]}.values())
+        off_brief = list({c.name: {"name": c.name, "label": f.label, "reasons": f.against} for c, f in v.get("off_brief", [])}.values())
         missing += list(r.warnings)
         missing += [f"{domain_label(d)}: {len(v['unverified'])} candidate(s) had constraints that could not be verified from Qloo data"] * bool(v["unverified"])
         missing += [f"{domain_label(d)}: only {len(picks)} of {s.picks[d]} requested picks available after {s.revisions[d]} revision(s)"] * (len(picks) < s.picks[d])
-        out["domains"][d] = {"label": domain_label(d), "selected": picks, "outranked": outranked, "rejected": rejected, "revisions": s.revisions[d],
+        out["domains"][d] = {"label": domain_label(d), "selected": picks, "outranked": outranked, "rejected": rejected, "off_brief": off_brief, "revisions": s.revisions[d],
                              "pool_size": len(s.pool[d]), "anchors_rejected": {names.get(i, i): why for i, why in r.rejected.items()},
                              "anchors_ignored": [names.get(i, i) for i in r.ignored], "latency_ms": r.latency_ms}
     out["status"] = "complete"
@@ -137,12 +159,21 @@ def to_markdown(bp: dict[str, Any]) -> str:
         for p in dom["selected"]:
             loc = f" — {p['props'].get('address')}" if p["props"].get("address") else ""
             L.append(f"- **{p['name']}**{loc}. {p['why']}" + (f" Unverified: {'; '.join(p['unverified'])}." if p["unverified"] else ""))
+            st = p.get("suitability")
+            if st:
+                L.append(f"  - Use: {st['use']}. Status: {st['label']}.")
+                L += [f"  - Fits your goals: {x}" for x in st["fit"]] + [f"  - Verified (Qloo metadata): {x}" for x in st["verified"]]
+                L += [f"  - Check before using: {x}" for x in st["unknowns"]] + [f"  - Next step: {st['next_action']}"]
+                if p.get("alternative"):
+                    L.append(f"  - Alternative: {p['alternative']['name']} ({p['alternative']['label']})")
         for a, why in dom["anchors_rejected"].items():
             L.append(f"- _Anchor {a} not used here:_ {why}")
         for a in dom["anchors_ignored"]:
             L.append(f"- _Anchor {a} accepted by Qloo but contributed nothing here._")
         if dom["rejected"]:
             L += ["", "Rejected:", *[f"- {r['name']}: {'; '.join(r['reasons'])}" for r in dom["rejected"][:8]]]
+        if dom.get("off_brief"):
+            L += ["", "Did not fit the brief:", *[f"- {r['name']}: {r['label']} ({'; '.join(r['reasons'])})" for r in dom["off_brief"][:8]]]
         L.append("")
     L += ["## Anchor influence (leave-one-out change in candidate set, 0=no change)", f"`{bp['anchor_influence']['leave_one_out_set_change']}`", "",
           "## Budget", bp["budget"]["disclaimer"], "", "## Missing data / warnings", *[f"- {m}" for m in bp["missing_data"]], "",

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from .qloo import Anchor, Candidate, DomainResult, QlooService, Resolution, StopRun
+from . import suitability as suit
 
 DOMAINS = ("artist", "book", "brand", "place")
 MAX_STEPS, MAX_REVISIONS, DEFAULT_PICKS = 40, 2, 4
@@ -27,6 +28,9 @@ class Constraints:
     min_book_year: int | None = None
     exclude_terms: tuple[str, ...] = ()
     amenity_unit_budget_usd: float | None = None  # USER-ENTERED assumption, never verified
+    hotel_lat: float | None = None  # optional precise hotel location; required before any walking claim
+    hotel_lon: float | None = None
+    max_walk_km: float = 1.5
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,10 @@ class Brief:
             raise ValueError("min_place_rating must be 0-5")
         if c.amenity_unit_budget_usd is not None and c.amenity_unit_budget_usd < 0:
             raise ValueError("budget must be >= 0")
+        if (c.hotel_lat is None) != (c.hotel_lon is None) or (c.hotel_lat is not None and not (-90 <= c.hotel_lat <= 90 and -180 <= c.hotel_lon <= 180)):
+            raise ValueError("hotel location needs both a valid latitude and longitude")
+        if not 0.2 <= c.max_walk_km <= 10:
+            raise ValueError("max_walk_km must be 0.2-10")
 
 
 def interpret(brief: Brief) -> dict[str, int]:
@@ -69,10 +77,9 @@ def check(c: Candidate, cons: Constraints) -> tuple[list[tuple[str, str]], list[
     bad: list[tuple[str, str]] = []
     unk: list[str] = []
     p = c.props
-    blob = " ".join([c.name, str(p.get("description", "")), str(p.get("short_description", "")), *c.tags]).casefold()
-    for term in cons.exclude_terms:
-        if term.casefold() in blob:
-            bad.append(("exclude", f"matches excluded term '{term}'"))
+    hard, notes = suit.exclusion(c, cons.exclude_terms)
+    bad += [("exclude", h) for h in hard]
+    unk += notes
     if c.domain == "place":
         if p.get("is_closed") is True:
             bad.append(("closed", "marked closed in Qloo data"))
@@ -111,6 +118,8 @@ class State:
     revisions: Counter = field(default_factory=Counter)
     trace: list[dict[str, Any]] = field(default_factory=list)
     influence: dict[str, dict[str, float]] = field(default_factory=dict)
+    fit: dict[str, suit.Suitability] = field(default_factory=dict)  # Stage B verdict per candidate id
+    prof: suit.Profile | None = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -139,6 +148,8 @@ def run(brief: Brief, svc: QlooService, audit: bool = True, on_event=None) -> di
     """on_event(dict) receives real progress: {'step','tool','arg','phase':'running'|'done','outcome'}."""
     brief.validate()
     s = State(brief, interpret(brief))
+    c = brief.constraints
+    s.prof = suit.profile(brief.goals, brief.concept, (c.hotel_lat, c.hotel_lon) if c.hotel_lat is not None else None, c.max_walk_km)
     emit = on_event or (lambda e: None)
     for step in range(MAX_STEPS):
         tool, arg = next_action(s)
@@ -196,24 +207,36 @@ def t_query(s: State, svc: QlooService, _: str) -> str:
 
 
 def t_validate(s: State, svc: QlooService, d: str) -> str:
-    acc, rej, unk = [], [], {}
+    """Stage B: hard constraints first, then contextual suitability. Conflicts are kept for the record, never selected."""
+    acc, rej, unk, off = [], [], {}, []
     for c in s.pool[d].values():
         bad, notes = check(c, s.brief.constraints)
+        fit = suit.assess(c, s.prof)
+        s.fit[c.id] = fit
+        if fit.verdict == "reject":
+            bad = bad + [("suitability", r) for r in fit.against]
         if bad:
             rej.append((c, bad))
+        elif fit.verdict == "conflict":
+            off.append((c, fit))
         else:
             acc.append(c)
             if notes:
                 unk[c.id] = notes
     prev = s.verdict.get(d, {})
     failed = s.results[d].error is not None  # an upstream failure will not improve by re-asking
-    s.verdict[d] = {"accepted": acc, "rejected": rej, "unverified": unk, "exhausted": prev.get("exhausted", False) or failed}
-    return f"{d}: {len(acc)} accepted, {len(rej)} rejected, {len(unk)} with unverifiable constraints"
+    s.verdict[d] = {"accepted": acc, "rejected": rej, "unverified": unk, "off_brief": off, "exhausted": prev.get("exhausted", False) or failed}
+    aligned = sum(1 for c in acc if s.fit[c.id].verdict == "aligned")
+    return f"{d}: {len(acc)} accepted, {len(rej)} rejected, {len(unk)} with unverifiable constraints, {len(off)} off-brief, {aligned} with positive fit evidence"
 
 
-def plan_revision(d: str, rejected, cons: Constraints, n: int) -> tuple[dict[str, Any], str]:
-    """Choose a revision from WHY candidates were rejected."""
+def plan_revision(d: str, rejected, cons: Constraints, n: int, off_brief=()) -> tuple[dict[str, Any], str]:
+    """Choose a revision from WHY candidates failed: a server-side filter when one exists, otherwise more candidates."""
     codes = Counter(code for _, bad in rejected for code, _ in bad)
+    labels = Counter(f.label for _, f in off_brief)
+    if labels and sum(labels.values()) >= sum(codes.values()):
+        top_label, k = labels.most_common(1)[0]
+        return {"page": n + 2}, f"{sum(labels.values())} candidates off-brief (most common: {top_label.lower()}, {k}) -> fetch more candidates"
     top = codes.most_common(1)[0][0] if codes else None
     if n == 0 and d == "place" and top == "price" and cons.max_place_price_level:
         return {"filter.price_level.max": cons.max_place_price_level}, f"{codes['price']} places over price cap -> add server-side price filter"
@@ -223,7 +246,7 @@ def plan_revision(d: str, rejected, cons: Constraints, n: int) -> tuple[dict[str
 
 
 def t_revise(s: State, svc: QlooService, d: str) -> str:
-    extra, why = plan_revision(d, s.verdict[d]["rejected"], s.brief.constraints, s.revisions[d])
+    extra, why = plan_revision(d, s.verdict[d]["rejected"], s.brief.constraints, s.revisions[d], s.verdict[d].get("off_brief", ()))
     s.revisions[d] += 1
     try:
         r = svc.query_domain(d, s.anchors, s.brief.city, extra)

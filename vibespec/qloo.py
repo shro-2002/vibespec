@@ -20,12 +20,15 @@ from smoke_test import TARGETS, call, entities, validate
 
 NEAR_RATIO = 0.9
 DESC_MAX = 280
-DOMAIN_PROPS = {
+DOMAIN_PROPS = {  # documented entity properties used by Stage B suitability checks
     "book": ("publication_year", "page_count", "description"),
-    "artist": ("description", "obscurity_scale", "start_year"),
-    "brand": ("short_description", "price_range_usd_min", "price_range_usd_max", "industry"),
-    "place": ("address", "price_level", "business_rating", "is_closed", "short_description", "hotel_class"),
+    "artist": ("description", "obscurity_scale", "start_year", "adjectives_for_music", "primary_genres", "performance_style"),
+    "brand": ("short_description", "description", "price_range_usd_min", "price_range_usd_max", "industry", "brand_type", "category_description",
+              "sustainability_initiatives", "known_partnerships", "owned_by", "parent_organization"),
+    "place": ("address", "price_level", "business_rating", "is_closed", "short_description", "hotel_class", "hours", "primary_genre",
+              "keywords", "ambience_description", "good_for"),
 }
+LIST_MAX = 12
 
 Transport = Callable[[str, Mapping[str, Any]], dict]
 
@@ -215,8 +218,23 @@ class QlooService:
         q = e.get("query") or {}
         attr = {i["entity_id"]: float(i.get("score", 0)) for i in (q.get("explainability") or {}).get("signal.interests.entities", []) or [] if i.get("entity_id")}
         p = e.get("properties") or {}
-        props = {k: (str(p[k])[:DESC_MAX] if isinstance(p[k], str) else p[k]) for k in DOMAIN_PROPS[domain] if p.get(k) is not None}
+        props = {k: _slim(k, p[k]) for k in DOMAIN_PROPS[domain] if p.get(k) is not None}
         loc = e.get("location") if domain == "place" else None
         geo = {k: loc[k] for k in ("lat", "lon", "geohash") if k in loc} if isinstance(loc, dict) else None
         tags = tuple(t["name"] for t in (e.get("tags") or []) if isinstance(t, dict) and t.get("name"))
         return Candidate(e["entity_id"], e["name"], domain, q.get("affinity"), attr, tags, props, geo)
+
+
+def _slim(key: str, value: Any) -> Any:
+    """Keep only what the checks need: short strings, name lists, a genre id, and an hours summary."""
+    if key == "hours" and isinstance(value, dict):
+        days = [v for v in value.values() if isinstance(v, list)]
+        open_days = sum(1 for d in days if any(isinstance(x, dict) and not x.get("closed") for x in d))
+        return {"days_listed": len(days), "days_open": open_days}
+    if key == "primary_genre" and isinstance(value, dict):
+        return value.get("id")
+    if isinstance(value, list):
+        return [(x.get("name") if isinstance(x, dict) else x) for x in value[:LIST_MAX] if x is not None]
+    if isinstance(value, str):
+        return value[:DESC_MAX]
+    return value

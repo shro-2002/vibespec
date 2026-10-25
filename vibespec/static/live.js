@@ -4,7 +4,7 @@
   const STAGES = [
     { tool: "resolve_anchor", title: "Resolve anchors", desc: "Match each brand to a Qloo entity" },
     { tool: "query_domain", title: "Retrieve from Qloo", desc: "Music, books, brands and places in parallel" },
-    { tool: "validate_constraints", title: "Validate constraints", desc: "Check every candidate against your limits" },
+    { tool: "validate_constraints", title: "Check fit with your brief", desc: "Constraints, then suitability for this hotel" },
     { tool: "revise_query", title: "Revise from evidence", desc: "Only when too few candidates pass", optional: true },
     { tool: "audit_influence", title: "Audit anchor influence", desc: "Re-query without each anchor" },
     { tool: "finish", title: "Assemble blueprint", desc: "Rank, balance and explain" },
@@ -15,7 +15,7 @@
   const parts = {
     resolved: (o) => /^resolved '(.+?)' -> '(.+?)' \((.+)\)$/.exec(o || ""),
     retrieved: (o) => (o || "").split("; ").map((s) => /^(\w+): (\d+) candidates, effective anchors (\d+)\/(\d+), rejected (\d+), ignored (\d+)/.exec(s)).filter(Boolean),
-    validated: (o) => /^(\w+): (\d+) accepted, (\d+) rejected, (\d+) with unverifiable/.exec(o || ""),
+    validated: (o) => /^(\w+): (\d+) accepted, (\d+) rejected, (\d+) with unverifiable[^,]*(?:, (\d+) off-brief, (\d+) with positive)?/.exec(o || ""),
     revised: (o) => /^(\w+): (.+?); (\d+) new candidates; now (\d+) accepted/.exec(o || ""),
   };
 
@@ -68,7 +68,7 @@
     if (!done.length) return null;
     return el("section", { class: "panel" }, el("h3", {}, "Constraint validation"), el("div", { class: "tiles" }, done.map((s) => {
       const m = parts.validated(s.outcome);
-      return m ? el("div", { class: "tile" }, el("b", {}, DOMAIN_NAME[m[1]] || m[1]), `${m[2]} passed, ${m[3]} rejected${+m[4] ? `, ${m[4]} unverifiable` : ""}`) : el("div", { class: "tile" }, s.outcome);
+      return m ? el("div", { class: "tile" }, el("b", {}, DOMAIN_NAME[m[1]] || m[1]), `${m[2]} fit the brief, ${m[3]} failed constraints${m[5] ? `, ${m[5]} off-brief` : ""}${m[6] ? `, ${m[6]} with positive evidence` : ""}`) : el("div", { class: "tile" }, s.outcome);
     })));
   }
 

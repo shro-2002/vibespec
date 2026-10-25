@@ -84,7 +84,15 @@ def parse_brief(d: dict) -> Brief:
 
     ex = c.get("exclude_terms")
     terms = tuple(x.strip() for x in ex.split(",") if x.strip()) if isinstance(ex, str) else tuple(str(x) for x in (ex or ()))
-    cons = Constraints(num("max_place_price_level", int), num("min_place_rating", float), num("min_book_year", int), terms, num("amenity_unit_budget_usd", float))
+    loc = str(c.get("hotel_location") or "").strip()
+    lat = lon = None
+    if loc:
+        parts = [x.strip() for x in loc.split(",")]
+        if len(parts) != 2:
+            raise ValueError("hotel location must be 'latitude, longitude'")
+        lat, lon = float(parts[0]), float(parts[1])
+    cons = Constraints(num("max_place_price_level", int), num("min_place_rating", float), num("min_book_year", int), terms, num("amenity_unit_budget_usd", float),
+                       lat, lon, num("max_walk_km", float) or 1.5)
     anchors = tuple(str(a).strip() for a in (d.get("anchors") or []) if str(a).strip())
     return Brief(str(d.get("concept", "")).strip(), str(d.get("city", "")).strip(), anchors, str(d.get("goals", "")).strip(), cons,
                  {str(k): str(v) for k, v in (d.get("confirmed") or {}).items()})

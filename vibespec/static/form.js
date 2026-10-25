@@ -45,7 +45,7 @@
       add(input.value);
       const v = (n) => form.elements[n].value.trim();
       return { concept: v("concept"), city: v("city"), anchors: [...anchors], goals: v("goals"), confirmed: VS.confirmed,
-        constraints: Object.fromEntries(["max_place_price_level", "min_place_rating", "min_book_year", "amenity_unit_budget_usd", "exclude_terms"].map((k) => [k, v(k) || null])) };
+        constraints: Object.fromEntries(["max_place_price_level", "min_place_rating", "min_book_year", "amenity_unit_budget_usd", "exclude_terms", "hotel_location"].map((k) => [k, v(k) || null])) };
     },
     validate() {
       const b = VS.form.body(), problems = [];

@@ -84,7 +84,9 @@ def main():
                     res["B_self_pass_oracle_violated"] = oracle.count("violated")  # B's picks all passed B's self-reported check
                 res[a] = {"n": len(cands), "pool_size": arms[a]["domains"][d]["pool_size"],
                           "revisions": arms[a]["domains"][d]["revisions"], "self_check": self_v, "oracle_check": {k: oracle.count(k) for k in ("satisfied", "violated", "unverifiable")},
-                          "found_in_catalogue": exist}
+                          "found_in_catalogue": exist,
+                          "stage_b_aligned": sum(1 for p in items if (p.get("suitability") or {}).get("verdict") == "aligned"),
+                          "off_brief": len(arms[a]["domains"][d].get("off_brief", []))}
             na, nb = {stem(n) for n in plan_lists(arms["A"])[d]}, {stem(n) for n in plan_lists(arms["B"])[d]}
             res["overlap_jaccard"] = round(len(na & nb) / len(na | nb), 3) if na | nb else None
             row["domains"][d] = res
@@ -116,7 +118,7 @@ def write_rater_html(packet):
 
 def write_report(rows):
     ok = [r for r in rows if "domains" in r]
-    L = ["# VibeSpec Phase 2 — controlled comparison (System A: Qloo vs System B: same engine, Qloo-free candidates)", "",
+    L = ["# VibeSpec Phase 3 — controlled comparison with Stage B suitability (System A: Qloo vs System B: same engine, Qloo-free candidates)", "",
          "Status of human ratings: **PENDING — none collected, none fabricated.** Run `python3 score_controlled.py` after raters export CSVs.", "",
          "## Design", "- Same agent loop, constraint validator, revision logic, selection and blueprint code in both arms; only candidate generation differs.",
          "- A: Qloo `/v2/insights` (take=20 per query, server-side filters during revisions). B: local `qwen3:14b` (temperature 0), take=20 per query, constraints as prompt text during revisions, attributes self-reported (flagged unverified). Details: `vibespec/llm_source.py`.",
@@ -138,7 +140,10 @@ def write_report(rows):
           f"| oracle constraint check: satisfied | {tot('A','oracle_check','satisfied')} | {tot('B','oracle_check','satisfied')} |",
           f"| oracle constraint check: violated | {tot('A','oracle_check','violated')} | {tot('B','oracle_check','violated')} |",
           f"| oracle constraint check: unverifiable | {tot('A','oracle_check','unverifiable')} | {tot('B','oracle_check','unverifiable')} |",
-          f"| B picks whose self-reported attributes passed but catalogue metadata violates | – | {sum(r['domains'][d].get('B_self_pass_oracle_violated', 0) for r in ok for d in DOMAINS)} |", ""]
+          f"| B picks whose self-reported attributes passed but catalogue metadata violates | – | {sum(r['domains'][d].get('B_self_pass_oracle_violated', 0) for r in ok for d in DOMAINS)} |",
+          f"| Stage B: picks with positive fit evidence (each arm judged on its own metadata) | {tot('A','stage_b_aligned',None)} | {tot('B','stage_b_aligned',None)} |",
+          f"| Stage B: candidates screened out as off-brief | {tot('A','off_brief',None)} | {tot('B','off_brief',None)} |", "",
+          "Stage B rows are not quality scores: B's metadata is mostly the generator's own short descriptions, so B has less evidence to be judged on, which is itself part of what Qloo supplies.", ""]
     ov = [r["domains"][d]["overlap_jaccard"] for r in ok for d in DOMAINS if r["domains"][d]["overlap_jaccard"] is not None]
     L += [f"Pick overlap A vs B: mean Jaccard {sum(ov)/len(ov):.3f} over {len(ov)} comparisons (difference is not improvement).", "",
           "## Human evaluation", "", "PENDING. Rater page: `private/eval2/rater.html` (offline, exports CSV). Raters needed: >=3 independent, none of whom built the system.", ""]

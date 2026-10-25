@@ -285,3 +285,12 @@ body[data-view=result] .run-bar{padding:8px 0;background:transparent;border-bott
 .panel fieldset.step{padding:14px 0 6px}
 .panel fieldset.step legend{font-size:1.05rem}
 .info-h{margin:28px 0 6px;font-size:1.15rem}
+.fit{display:grid;gap:6px;border-left:3px solid var(--line);padding-left:12px}
+.verdict{font-weight:700;font-size:.92rem}
+.verdict.aligned{color:var(--moss)}.verdict.unverified,.verdict.lead{color:var(--ochre)}
+.use,.next,.alt{font-size:.88rem;color:var(--ink2)}
+.fit-row b{display:block;font-size:.8rem;color:var(--mute);font-weight:600}
+.fit-row ul{margin:2px 0 0;padding-left:18px;font-size:.86rem;color:var(--ink2)}
+.fit-row.good ul{color:var(--ink)}.fit-row.unk ul{color:var(--ochre)}.fit-row.none ul{color:var(--mute);font-style:italic}
+.evlabel{font-size:.78rem;color:var(--mute);margin-top:4px}
+.considered .body{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}

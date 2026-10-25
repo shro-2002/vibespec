@@ -103,7 +103,8 @@
           <div class="field"><label for="min_place_rating">Lowest place rating</label><input id="min_place_rating" name="min_place_rating" type="number" min="0" max="5" step="0.1" placeholder="0 to 5"></div>
           <div class="field"><label for="min_book_year">Books published since</label><input id="min_book_year" name="min_book_year" type="number" min="1800" max="2100" placeholder="2012"></div>
           <div class="field"><label for="amenity_unit_budget_usd">Amenity unit budget in USD</label><input id="amenity_unit_budget_usd" name="amenity_unit_budget_usd" type="number" min="0" step="1" placeholder="Your own assumption"><span class="hint">Compared with Qloo's indicative price ranges, never treated as a quote.</span></div>
-          <div class="field wide"><label for="exclude_terms">Exclude anything mentioning</label><input id="exclude_terms" name="exclude_terms" type="text" placeholder="Starbucks, chain"></div>
+          <div class="field"><label for="exclude_terms">Exclude brands or places named</label><input id="exclude_terms" name="exclude_terms" type="text" placeholder="Starbucks"><span class="hint">Only excludes things named or owned by these. Mere mentions are flagged, not removed.</span></div>
+          <div class="field"><label for="hotel_location">Hotel location (latitude, longitude)</label><input id="hotel_location" name="hotel_location" type="text" placeholder="40.7223, -73.9874" inputmode="decimal"><span class="hint">Needed before VibeSpec says anything is walkable.</span></div>
         </div>
       </details>
       <div class="form-foot">
