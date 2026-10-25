@@ -349,3 +349,6 @@ body[data-view=result] .run-bar{padding:8px 0;background:transparent;border-bott
 .amen-group.valid h3 .phase{color:var(--moss)}
 .amen-empty{margin-top:8px;padding:12px 16px;border:1.5px dashed var(--line);border-radius:12px;color:var(--ink2);font-size:.9rem;background:var(--linen)}
 .pick-card.partner .verdict{color:var(--ochre)}
+.eyebrow{font:600 .86rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--clay);margin:0 0 14px}
+.hero h1{max-width:none}
+.hero .lede{font-size:1.15rem;max-width:46ch}
