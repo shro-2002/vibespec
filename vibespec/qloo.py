@@ -16,8 +16,9 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from smoke_test import TARGETS, call, entities, validate
+from smoke_test import MAX_RETRIES, TARGETS, call, entities, validate
 
+MAX_ATTEMPTS = MAX_RETRIES + 1  # most HTTP requests one logical call may send
 NEAR_RATIO = 0.9
 DESC_MAX = 280
 DOMAIN_PROPS = {  # documented entity properties used by Stage B suitability checks
@@ -108,15 +109,23 @@ def norm(s: str) -> str:
 class QlooService:
     def __init__(self, api_key: str | None = None, cache_dir: str | Path | None = ".cache", workers: int = 3,
                  budget: int = 60, transport: Transport | None = None, deadline: float | None = None):
-        self._transport = transport or (lambda path, params: call(path, dict(params), api_key or ""))
+        self._custom, self._key = transport, api_key or ""
         self._cache_dir = Path(cache_dir) if cache_dir else None
-        self._workers, self._budget, self._live, self._deadline, self.cache_hits = workers, budget, 0, deadline, 0
+        self._workers, self._budget, self._deadline, self.cache_hits = workers, budget, deadline, 0
+        self._live = 0  # HTTP requests actually dispatched to Qloo, retries included
+        self._inflight = 0  # attempts reserved for requests currently on the wire
         self._lock = threading.Lock()
         self._mem: dict[str, dict] = {}
 
     @property
     def live_calls(self) -> int:
+        """Dispatched Qloo HTTP requests (retries included). Cache hits never count."""
         return self._live
+
+    def _send(self, path: str, params: Mapping[str, Any], attempts: int) -> dict:
+        if self._custom:
+            return self._custom(path, params)
+        return call(path, dict(params), self._key, max_attempts=attempts)
 
     def _get(self, path: str, params: Mapping[str, Any]) -> dict:
         validate(path, dict(params))  # unsupported params are an error, never silently sent
@@ -132,10 +141,22 @@ class QlooService:
         with self._lock:
             if self._deadline is not None and time.time() >= self._deadline:
                 raise DeadlineExceeded("time limit reached")
-            if self._live >= self._budget:
+            room = self._budget - self._live - self._inflight  # dispatched + on-the-wire can never exceed the budget
+            if room <= 0:
                 raise BudgetExceeded(f"live call budget of {self._budget} exhausted")
-            self._live += 1
-        res = self._transport(path, params)
+            take = min(MAX_ATTEMPTS, room)
+            self._inflight += take
+        sent = 0
+        try:
+            res = self._send(path, params, take)
+            sent = min(max(int(res.get("attempts", 1)), 1), take)
+        except BaseException:
+            sent = take  # unknown outcome: count the worst case rather than under-count
+            raise
+        finally:
+            with self._lock:
+                self._inflight -= take
+                self._live += sent
         if res["status"] == 200 and res["body"] is None:  # 200 but unparseable
             res = {**res, "status": "malformed_response", "error": "malformed JSON"}
         if res["status"] in (200, 400) and res["body"] is not None:  # 400s are deterministic, cache to save quota

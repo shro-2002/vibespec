@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .agent import Brief, Constraints, run
 from .blueprint import to_markdown
+from .budget import DailyBudget
 from .jobs import Busy, JobManager
 from .qloo import QlooService
 
@@ -46,7 +47,7 @@ class Config:
 CFG = Config()
 _lock = threading.Lock()
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
-_spent = {"day": time.strftime("%Y-%m-%d"), "calls": 0}
+BUDGET = DailyBudget(CFG.daily_call_cap, CFG.run_budget)  # process-local: resets on restart, not Qloo's real quota
 
 
 def redact(text: str) -> str:
@@ -63,17 +64,6 @@ def allow(ip: str, kind: str, limit: int) -> bool:
             return False
         q.append(now)
         return True
-
-
-def reserve_budget() -> int:
-    """Daily live-call cap shared by all visitors (protects the hackathon key quota). Returns this run's budget."""
-    with _lock:
-        today = time.strftime("%Y-%m-%d")
-        if _spent["day"] != today:
-            _spent.update(day=today, calls=0)
-        grant = max(0, min(CFG.run_budget, CFG.daily_call_cap - _spent["calls"]))
-        _spent["calls"] += grant
-        return grant
 
 
 def parse_brief(d: dict) -> Brief:
@@ -98,13 +88,19 @@ def parse_brief(d: dict) -> Brief:
                  {str(k): str(v) for k, v in (d.get("confirmed") or {}).items()})
 
 
+CAPACITY_MSG = "Daily demo capacity reached; try again tomorrow. Briefs already generated may still load from the private cache."
+
+
 def runner(brief: Brief, on_event, deadline: float) -> dict:
-    grant = reserve_budget()
-    if grant == 0:
-        return {"status": "failed", "error": "Daily demo capacity reached; try again tomorrow.", "trace": [], "anchors": [], "brief": {}}
-    svc = QlooService(CFG.key, CFG.cache_dir, budget=grant, deadline=deadline)
-    bp = run(brief, svc, on_event=on_event)
-    bp["markdown"] = to_markdown(bp)
+    lease = BUDGET.reserve()  # may be 0: cache-only run
+    svc = QlooService(CFG.key, CFG.cache_dir, budget=lease.grant, deadline=deadline)
+    try:
+        bp = run(brief, svc, on_event=on_event)
+        bp["markdown"] = to_markdown(bp)
+    finally:
+        lease.close(svc.live_calls)  # success, failure, timeout or crash: the unused reservation is always returned, once
+    if lease.grant == 0 and bp.get("status") != "complete":
+        bp.update(status="failed", error=CAPACITY_MSG)
     return bp
 
 
@@ -135,7 +131,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?")[0]
         if path == "/healthz":
-            return self._json(200, {"ok": True, "qloo_key_configured": bool(CFG.key)})
+            return self._json(200, {"ok": True, "qloo_key_configured": bool(CFG.key), "call_budget": BUDGET.snapshot()})
         if path == "/":
             return self._send(200, STATIC.read_bytes(), "text/html; charset=utf-8")
         if path.startswith("/static/"):

@@ -23,13 +23,18 @@ CLI: `python3 run_brief.py briefs/demo_nyc.json --md`
 |---|---|---|
 | `QLOO_API_KEY` | – | required for live runs; never logged or returned (redacted) |
 | `PORT` | 10000 | listens on 0.0.0.0 |
-| `VIBESPEC_DAILY_CALL_CAP` | 300 | live Qloo calls per day, all visitors |
+| `VIBESPEC_DAILY_CALL_CAP` | 300 | Qloo HTTP requests (retries included) per day, all visitors, this process only |
 | `VIBESPEC_RUN_BUDGET` | 45 | live calls per run |
 | `VIBESPEC_JOB_TIMEOUT` | 150 | seconds before a run is cut off (labelled timeout) |
 | `VIBESPEC_MAX_RUNNING` / `VIBESPEC_MAX_QUEUED` | 2 / 3 | concurrency; extra submissions get 429 |
 | `VIBESPEC_RATE_PER_MIN` | 6 | per-IP submissions |
 | `VIBESPEC_TRUST_PROXY` | off | set `1` behind a trusted proxy to use X-Forwarded-For |
 | `VIBESPEC_CACHE_DIR` | `.cache` | private response cache (contains Qloo data; never commit) |
+
+## Call-budget accounting
+A run reserves up to `VIBESPEC_RUN_BUDGET` requests, spends only what it dispatches (cache hits cost nothing; every HTTP attempt, retries included, counts), and always returns the unused reservation exactly once, whether it succeeds, fails, times out or crashes. When the day's budget is spent, runs that can be answered from the private cache still work; new Qloo lookups are declined with a clear message. `/healthz` shows `dispatched`, `reserved` and `available`.
+
+**Limits:** the counter is process-local. A restart or redeploy resets it to zero, and it knows nothing about Qloo's real quota or other users of the same key. It protects the key from this app's own traffic; it is not durable quota protection.
 
 ## How it works
 `vibespec/qloo.py` resolve + query service (typed results, retries, cache, budget, deadline) · `agent.py` tool loop and constraint checks · `blueprint.py` assembly/Markdown · `jobs.py` background jobs + polling · `app.py` + `static/index.html` UI · `llm_source.py` Qloo-free candidate source used only for the controlled evaluation.

@@ -44,33 +44,36 @@ def validate(path, params):
         raise Unsupported("filter.type is required")
 
 
-def call(path, params, key):
-    """One GET. Returns dict(status, body, latency_ms, error). Never raises on HTTP/network problems."""
+def call(path, params, key, max_attempts=None):
+    """One logical GET with retries. Returns dict(status, body, latency_ms, error, attempts); never raises on HTTP/network problems.
+    `attempts` counts every HTTP request actually sent (each one counts against Qloo's quota); max_attempts caps it."""
     validate(path, params)
     url = f"{BASE}{path}?{urllib.parse.urlencode(params)}"
-    for attempt in range(MAX_RETRIES + 1):
+    limit = max(1, min(MAX_RETRIES + 1, max_attempts if max_attempts else MAX_RETRIES + 1))
+    for attempt in range(limit):
         t0 = time.time()
         req = urllib.request.Request(url, headers={"X-Api-Key": key, "Accept": "application/json"})
+        more = attempt < limit - 1
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
                 raw, status = r.read(), r.status
         except urllib.error.HTTPError as e:
             raw, status = e.read(), e.code
-            if (status == 429 or status >= 500) and attempt < MAX_RETRIES:
+            if (status == 429 or status >= 500) and more:
                 time.sleep(float(e.headers.get("Retry-After") or 2 * (attempt + 1)))
                 continue
         except (urllib.error.URLError, TimeoutError) as e:
-            if attempt < MAX_RETRIES:
+            if more:
                 time.sleep(1 + attempt)
                 continue
-            return {"status": "network_error", "body": None, "latency_ms": int((time.time() - t0) * 1000), "error": type(e).__name__}
+            return {"status": "network_error", "body": None, "latency_ms": int((time.time() - t0) * 1000), "error": type(e).__name__, "attempts": attempt + 1}
         ms = int((time.time() - t0) * 1000)
         try:
             body = json.loads(raw)
         except ValueError:
-            return {"status": status, "body": None, "latency_ms": ms, "error": "malformed_json"}
+            return {"status": status, "body": None, "latency_ms": ms, "error": "malformed_json", "attempts": attempt + 1}
         time.sleep(SLEEP_S)
-        return {"status": status, "body": body, "latency_ms": ms, "error": None if status == 200 else str(body)[:200]}
+        return {"status": status, "body": body, "latency_ms": ms, "error": None if status == 200 else str(body)[:200], "attempts": attempt + 1}
 
 
 def entities(body):

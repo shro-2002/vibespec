@@ -22,7 +22,7 @@ Cold runs take ~36 s (21 live Qloo calls, measured). The browser never waits on 
 | Spin-down | Docs: after 15 min without inbound traffic; cold start "about one minute". A judge's first visit may wait ~1 min. Say so in the Devpost testing instructions. |
 | Keep-warm | An external pinger every <15 min would keep it awake but burns the 750 h budget; unverified whether Render treats this as acceptable. Not set up. |
 | Ephemeral disk | Docs: local files lost on restart/redeploy/spin-down. The private Qloo cache and in-memory jobs vanish; each cold start repays ~21 live calls per new brief. A job in flight during a restart ends as "job lost" in the UI (tested path: 404 handling). |
-| Quota | `VIBESPEC_DAILY_CALL_CAP=300` ≈ 14 cold runs/day for all visitors. The hackathon key's true limit and whether it stays valid through 2026-11-05 are UNKNOWN; ask Qloo or watch for 401/429 (UI shows a clear message). |
+| Quota | `VIBESPEC_DAILY_CALL_CAP=300` ≈ 14 cold runs/day for all visitors; warm cached runs cost 0. The counter is process-local (resets on restart, not Qloo's real quota; see README, Call-budget accounting). The hackathon key's true limit and whether it stays valid through 2026-11-05 are UNKNOWN; ask Qloo or watch for 401/429 (UI shows a clear message). |
 | Single instance | Docs: Free cannot scale out. Capacity 2 concurrent + 3 queued runs; extra submissions get 429 "busy" (tested). |
 | Client IP | Per-IP limits trust `X-Forwarded-For` only when `VIBESPEC_TRUST_PROXY=1`; Render's header semantics not verified, so the global daily cap is the real protection. |
 | Restarts | Docs: Free instances "may be restarted at any time". |
