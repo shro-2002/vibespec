@@ -70,6 +70,21 @@
           dom.rejected.length > 12 ? el("p", { class: "hint" }, `${dom.rejected.length - 12} more in the JSON export.`) : null),
         el("div", {}, el("h4", {}, "Backups that fit"), dom.outranked.length ? el("ul", { class: "rowlist" }, dom.outranked.map((o) => el("li", {}, el("b", {}, o.name), ` ranked #${o.rank_in_query}`))) : el("p", { class: "hint" }, "None to show."))));
   }
+  /* Amenities: Qloo's own category data separates brands that make in-room products from broader cultural partners. Neither has a verified product. */
+  function amenityGroups(dom, names, single) {
+    const valid = dom.selected.filter((p) => (p.suitability || {}).verdict === "aligned");
+    const partner = dom.selected.filter((p) => (p.suitability || {}).verdict !== "aligned");
+    const group = (cls, title, tag, intro, picks, empty) => el("div", { class: `amen-group ${cls}` },
+      el("h3", {}, title, el("span", { class: "phase" }, tag)), el("p", {}, intro),
+      picks.length ? el("div", { class: "picks" }, picks.map((p) => { const c = card("brand", p, names, single); if (cls === "partner") c.classList.add("partner"); return c; })) : el("p", { class: "amen-empty" }, empty));
+    return el("div", {},
+      group("valid", "Amenity-category brands", "Category evidence only",
+        "Qloo classifies these brands as makers of in-room goods such as bath, linen or home products, and they fit your brief. This is a category match, not a verified product, price or supply.",
+        valid, "No brand in this run has positive evidence of making in-room amenities, so none is presented as a hotel amenity."),
+      group("partner", "Cultural partnership opportunities", "Unverified as amenities",
+        "These brands match your audience culturally, but Qloo's data does not show they make in-room products, or shows missing evidence. Treat them as partnership or co-branding conversations, not as amenities to stock.",
+        partner, "No partnership-only brands in this run."));
+  }
   function section(bp, d) {
     const dom = bp.domains[d.key], names = bp.anchors.map((a) => a.name), single = usable(dom, names.length) <= 1;
     const notices = [...dom.anchors_ignored.map((a) => `${a} was accepted by Qloo but contributed nothing here. These picks reflect ${names.filter((n) => n !== a && !dom.anchors_ignored.includes(n)).join(" and ") || "no anchor"} only.`),
@@ -78,7 +93,8 @@
       el("div", { class: `sec-head ${d.cls}` }, el("div", {}, el("h2", { id: `h-${d.id}` }, ICONS[d.key](), d.title), el("p", {}, d.blurb)), funnel(dom)),
       notices.map((n) => el("p", { class: "notice" }, el("b", {}, "Signal gap. "), n)),
       bp.trace.filter((t) => t.tool === "revise_query" && t.arg === d.key).map((t) => el("p", { class: "rev-note" }, el("b", {}, "Agent revision. "), String(t.outcome).replace(/^\w+: /, "").replace(" -> ", ": "))),
-      dom.selected.length ? el("div", { class: "picks" }, dom.selected.map((p) => card(d.key, p, names, single)))
+      d.key === "brand" && dom.selected.length ? amenityGroups(dom, names, single)
+        : dom.selected.length ? el("div", { class: "picks" }, dom.selected.map((p) => card(d.key, p, names, single)))
         : el("div", { class: "empty" }, dom.anchors_rejected && Object.keys(dom.anchors_rejected).length === names.length ? "Qloo found no usable signal for any of your anchors in this section, so there are no recommendations." : dom.rejected.length ? "Every candidate failed your constraints. Relax them and rebuild." : "No recommendations came back for this section."),
       considered(dom)));
   }
@@ -103,6 +119,7 @@
       const lines = VS.DOMAINS.map((d) => {
         const ps = sel(d), fit = ps.filter((p) => (p.suitability || {}).verdict === "aligned").length, leads = ps.filter((p) => /lead/i.test((p.suitability || {}).label || "")).length;
         const rev = bp.trace.filter((t) => t.tool === "revise_query" && t.arg === d.key).length;
+        if (d.key === "brand") return `Amenities: ${fit} amenity-category ${fit === 1 ? "brand" : "brands"} (category match only), ${ps.length - fit} cultural partnership ${ps.length - fit === 1 ? "opportunity" : "opportunities"} unverified as amenities${rev ? `; the agent revised this section ${rev === 1 ? "once" : `${rev} times`}` : ""}. No product, price or supply is verified.`;
         return `${d.title}: ${ps.length} ${ps.length === 1 ? "pick" : "picks"}, ${fit} with positive fit evidence${leads ? `, ${leads} ${leads === 1 ? "lead" : "leads"} to verify` : ""}${rev ? `; the agent revised this section ${rev === 1 ? "once" : `${rev} times`}` : ""}.`;
       });
       const gapCount = {};
